@@ -54,6 +54,11 @@ public class OpenIdConnectServiceUpgradeStepRegistrator
 				_oAuthClientEntryLocalService));
 
 		registry.register("2.2.0", "2.3.0", OpenIdConnectUserTable.create());
+
+		registry.register(
+			"2.3.0", "2.4.0",
+			UpgradeProcessFactory.addColumns(
+				"OpenIdConnectSession", "sid VARCHAR(75) null"));
 	}
 
 	@Reference
