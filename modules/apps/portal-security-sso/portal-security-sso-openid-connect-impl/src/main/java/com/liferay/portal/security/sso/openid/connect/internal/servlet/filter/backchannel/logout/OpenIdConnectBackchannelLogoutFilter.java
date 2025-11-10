@@ -72,6 +72,62 @@ public class OpenIdConnectBackchannelLogoutFilter extends BaseFilter {
 		return _openIdConnect.isEnabled(CompanyThreadLocal.getCompanyId());
 	}
 
+	protected Map<String, String> getConfigurationData() {
+		try {
+			Configuration[] configurations =
+				_configurationAdmin.listConfigurations(
+					StringBundler.concat(
+						"(", ConfigurationAdmin.SERVICE_FACTORYPID, "=",
+						OpenIdConnectProviderConfiguration.class.getName(),
+						".scoped)"));
+
+			if (configurations != null) {
+				Map<String, String> jwksUriMap = new ConcurrentHashMap<>();
+
+				for (Configuration configuration : configurations) {
+					Dictionary<String, Object> properties =
+						configuration.getProperties();
+
+					String discoveryEndPoint = (String)properties.get(
+						"discoveryEndPoint");
+					String issuerURL = (String)properties.get("issuerURL");
+					String jwksURI = (String)properties.get("jwksURI");
+
+					if (_log.isDebugEnabled()) {
+						_log.debug("Reading OIDC Connection metadata...");
+						_log.debug("discoveryEndPoint: " + discoveryEndPoint);
+					}
+
+					if (discoveryEndPoint != null) {
+						OIDCProviderMetadata metadata =
+							_resolveOIDCProviderMetadata(discoveryEndPoint);
+
+						issuerURL = metadata.getIssuer(
+						).getValue();
+						jwksURI = metadata.getJWKSetURI(
+						).toString();
+					}
+
+					if ((jwksURI != null) && (issuerURL != null)) {
+						jwksUriMap.put(issuerURL, jwksURI);
+					}
+
+					if (_log.isDebugEnabled()) {
+						_log.debug("issuerURL: " + issuerURL);
+						_log.debug("jwksURI: " + jwksURI);
+					}
+				}
+
+				return jwksUriMap;
+			}
+		}
+		catch (Exception exception) {
+			_log.error(exception);
+		}
+
+		return null;
+	}
+
 	@Override
 	protected Log getLog() {
 		return _log;
@@ -126,8 +182,7 @@ public class OpenIdConnectBackchannelLogoutFilter extends BaseFilter {
 
 						Issuer expectedIssuer = new Issuer(jwtClaimsSetIssuer);
 
-						Map<String, String> jwksUriMap =
-							_getConfigurationData();
+						Map<String, String> jwksUriMap = getConfigurationData();
 
 						String jwksURIString = jwksUriMap.get(
 							jwtClaimsSetIssuer);
@@ -183,62 +238,6 @@ public class OpenIdConnectBackchannelLogoutFilter extends BaseFilter {
 				_log.error("Failed to parse token", parseException);
 			}
 		}
-	}
-
-	private Map<String, String> _getConfigurationData() {
-		try {
-			Configuration[] configurations =
-				_configurationAdmin.listConfigurations(
-					StringBundler.concat(
-						"(", ConfigurationAdmin.SERVICE_FACTORYPID, "=",
-						OpenIdConnectProviderConfiguration.class.getName(),
-						".scoped)"));
-
-			if (configurations != null) {
-				Map<String, String> jwksUriMap = new ConcurrentHashMap<>();
-
-				for (Configuration configuration : configurations) {
-					Dictionary<String, Object> properties =
-						configuration.getProperties();
-
-					String discoveryEndPoint = (String)properties.get(
-						"discoveryEndPoint");
-					String issuerURL = (String)properties.get("issuerURL");
-					String jwksURI = (String)properties.get("jwksURI");
-
-					if (_log.isDebugEnabled()) {
-						_log.debug("Reading OIDC Connection metadata...");
-						_log.debug("discoveryEndPoint: " + discoveryEndPoint);
-					}
-
-					if (discoveryEndPoint != null) {
-						OIDCProviderMetadata metadata =
-							_resolveOIDCProviderMetadata(discoveryEndPoint);
-
-						issuerURL = metadata.getIssuer(
-						).getValue();
-						jwksURI = metadata.getJWKSetURI(
-						).toString();
-					}
-
-					if ((jwksURI != null) && (issuerURL != null)) {
-						jwksUriMap.put(issuerURL, jwksURI);
-					}
-
-					if (_log.isDebugEnabled()) {
-						_log.debug("issuerURL: " + issuerURL);
-						_log.debug("jwksURI: " + jwksURI);
-					}
-				}
-
-				return jwksUriMap;
-			}
-		}
-		catch (Exception exception) {
-			_log.error(exception);
-		}
-
-		return null;
 	}
 
 	private OIDCProviderMetadata _resolveOIDCProviderMetadata(
