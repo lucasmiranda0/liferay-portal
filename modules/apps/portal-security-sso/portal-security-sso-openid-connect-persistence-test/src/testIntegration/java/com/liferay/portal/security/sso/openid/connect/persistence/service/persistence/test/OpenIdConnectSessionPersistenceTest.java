@@ -137,6 +137,8 @@ public class OpenIdConnectSessionPersistenceTest {
 
 		newOpenIdConnectSession.setClientId(RandomTestUtil.randomString());
 
+		newOpenIdConnectSession.setIssuer(RandomTestUtil.randomString());
+
 		newOpenIdConnectSession.setIdToken(RandomTestUtil.randomString());
 
 		newOpenIdConnectSession.setRefreshToken(RandomTestUtil.randomString());
@@ -181,6 +183,9 @@ public class OpenIdConnectSessionPersistenceTest {
 			existingOpenIdConnectSession.getClientId(),
 			newOpenIdConnectSession.getClientId());
 		Assert.assertEquals(
+			existingOpenIdConnectSession.getIssuer(),
+			newOpenIdConnectSession.getIssuer());
+		Assert.assertEquals(
 			existingOpenIdConnectSession.getIdToken(),
 			newOpenIdConnectSession.getIdToken());
 		Assert.assertEquals(
@@ -208,21 +213,21 @@ public class OpenIdConnectSessionPersistenceTest {
 	}
 
 	@Test
-	public void testCountByA_S() throws Exception {
-		_persistence.countByA_S("", "");
-
-		_persistence.countByA_S("null", "null");
-
-		_persistence.countByA_S((String)null, (String)null);
-	}
-
-	@Test
 	public void testCountByC_A_C() throws Exception {
 		_persistence.countByC_A_C(RandomTestUtil.nextLong(), "", "");
 
 		_persistence.countByC_A_C(0L, "null", "null");
 
 		_persistence.countByC_A_C(0L, (String)null, (String)null);
+	}
+
+	@Test
+	public void testCountByI_S() throws Exception {
+		_persistence.countByI_S("", "");
+
+		_persistence.countByI_S("null", "null");
+
+		_persistence.countByI_S((String)null, (String)null);
 	}
 
 	@Test
@@ -265,8 +270,8 @@ public class OpenIdConnectSessionPersistenceTest {
 			"OpenIdConnectSession", "mvccVersion", true,
 			"openIdConnectSessionId", true, "companyId", true, "userId", true,
 			"modifiedDate", true, "accessTokenExpirationDate", true,
-			"authServerWellKnownURI", true, "clientId", true, "refreshToken",
-			true, "sessionId", true);
+			"authServerWellKnownURI", true, "clientId", true, "issuer", true,
+			"refreshToken", true, "sessionId", true);
 	}
 
 	@Test
@@ -561,10 +566,10 @@ public class OpenIdConnectSessionPersistenceTest {
 		OpenIdConnectSession openIdConnectSession) {
 
 		Assert.assertEquals(
-			openIdConnectSession.getAuthServerWellKnownURI(),
+			openIdConnectSession.getIssuer(),
 			ReflectionTestUtil.invoke(
 				openIdConnectSession, "getColumnOriginalValue",
-				new Class<?>[] {String.class}, "authServerWellKnownURI"));
+				new Class<?>[] {String.class}, "issuer"));
 		Assert.assertEquals(
 			openIdConnectSession.getSessionId(),
 			ReflectionTestUtil.invoke(
@@ -610,6 +615,8 @@ public class OpenIdConnectSessionPersistenceTest {
 			RandomTestUtil.randomString());
 
 		openIdConnectSession.setClientId(RandomTestUtil.randomString());
+
+		openIdConnectSession.setIssuer(RandomTestUtil.randomString());
 
 		openIdConnectSession.setIdToken(RandomTestUtil.randomString());
 
