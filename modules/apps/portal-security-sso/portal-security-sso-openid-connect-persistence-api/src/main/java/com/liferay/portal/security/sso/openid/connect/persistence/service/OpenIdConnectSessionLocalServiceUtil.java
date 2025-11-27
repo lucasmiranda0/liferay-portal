@@ -233,10 +233,9 @@ public class OpenIdConnectSessionLocalServiceUtil {
 	}
 
 	public static OpenIdConnectSession fetchOpenIdConnectSession(
-		String authServerWellKnownURI, String sessionId) {
+		String issuer, String sessionId) {
 
-		return getService().fetchOpenIdConnectSession(
-			authServerWellKnownURI, sessionId);
+		return getService().fetchOpenIdConnectSession(issuer, sessionId);
 	}
 
 	public static List<OpenIdConnectSession>
