@@ -213,12 +213,12 @@ public class OpenIdConnectSessionPersistenceTest {
 	}
 
 	@Test
-	public void testCountByC_A_C() throws Exception {
-		_persistence.countByC_A_C(RandomTestUtil.nextLong(), "", "");
+	public void testCountByU_I() throws Exception {
+		_persistence.countByU_I(RandomTestUtil.nextLong(), "");
 
-		_persistence.countByC_A_C(0L, "null", "null");
+		_persistence.countByU_I(0L, "null");
 
-		_persistence.countByC_A_C(0L, (String)null, (String)null);
+		_persistence.countByU_I(0L, (String)null);
 	}
 
 	@Test
@@ -228,6 +228,15 @@ public class OpenIdConnectSessionPersistenceTest {
 		_persistence.countByI_S("null", "null");
 
 		_persistence.countByI_S((String)null, (String)null);
+	}
+
+	@Test
+	public void testCountByC_A_C() throws Exception {
+		_persistence.countByC_A_C(RandomTestUtil.nextLong(), "", "");
+
+		_persistence.countByC_A_C(0L, "null", "null");
+
+		_persistence.countByC_A_C(0L, (String)null, (String)null);
 	}
 
 	@Test
@@ -564,6 +573,17 @@ public class OpenIdConnectSessionPersistenceTest {
 
 	private void _assertOriginalValues(
 		OpenIdConnectSession openIdConnectSession) {
+
+		Assert.assertEquals(
+			Long.valueOf(openIdConnectSession.getUserId()),
+			ReflectionTestUtil.<Long>invoke(
+				openIdConnectSession, "getColumnOriginalValue",
+				new Class<?>[] {String.class}, "userId"));
+		Assert.assertEquals(
+			openIdConnectSession.getIssuer(),
+			ReflectionTestUtil.invoke(
+				openIdConnectSession, "getColumnOriginalValue",
+				new Class<?>[] {String.class}, "issuer"));
 
 		Assert.assertEquals(
 			openIdConnectSession.getIssuer(),
