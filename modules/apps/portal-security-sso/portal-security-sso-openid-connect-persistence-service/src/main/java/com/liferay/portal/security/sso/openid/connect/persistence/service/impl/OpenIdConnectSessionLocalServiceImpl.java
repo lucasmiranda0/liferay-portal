@@ -73,6 +73,13 @@ public class OpenIdConnectSessionLocalServiceImpl
 
 	@Override
 	public OpenIdConnectSession fetchOpenIdConnectSession(
+		long userId, String issuer) {
+
+		return openIdConnectSessionPersistence.fetchByU_I(userId, issuer);
+	}
+
+	@Override
+	public OpenIdConnectSession fetchOpenIdConnectSession(
 		long userId, String authServerWellKnownURI, String clientId) {
 
 		return openIdConnectSessionPersistence.fetchByU_A_C(
