@@ -226,6 +226,12 @@ public class OpenIdConnectSessionLocalServiceUtil {
 	}
 
 	public static OpenIdConnectSession fetchOpenIdConnectSession(
+		long userId, String issuer) {
+
+		return getService().fetchOpenIdConnectSession(userId, issuer);
+	}
+
+	public static OpenIdConnectSession fetchOpenIdConnectSession(
 		long userId, String authServerWellKnownURI, String clientId) {
 
 		return getService().fetchOpenIdConnectSession(
