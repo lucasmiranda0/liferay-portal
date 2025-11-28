@@ -79,8 +79,7 @@ public class OpenIdConnectBackchannelLogoutServlet extends HttpServlet {
 
 			OpenIdConnectSession openIdConnectSession =
 				_openIdConnectSessionLocalService.fetchOpenIdConnectSession(
-					jwtClaimsSet.getIssuer() +
-						"/.well-known/openid-configuration",
+					jwtClaimsSet.getIssuer(),
 					jwtClaimsSet.getClaimAsString("sid"));
 
 			if (openIdConnectSession == null) {
