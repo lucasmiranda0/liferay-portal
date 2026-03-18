@@ -127,6 +127,15 @@ public class SamlSpIdpConnectionLocalServiceImpl
 	}
 
 	@Override
+	public SamlSpIdpConnection fetchSamlSpIdpConnection(
+		long companyId, String samlIdpEntityId)
+		throws PortalException {
+
+		return samlSpIdpConnectionPersistence.fetchByC_SIEI(
+			companyId, samlIdpEntityId);
+	}
+
+	@Override
 	public List<SamlSpIdpConnection> getSamlSpIdpConnections(long companyId) {
 		return samlSpIdpConnectionPersistence.findByCompanyId(companyId);
 	}

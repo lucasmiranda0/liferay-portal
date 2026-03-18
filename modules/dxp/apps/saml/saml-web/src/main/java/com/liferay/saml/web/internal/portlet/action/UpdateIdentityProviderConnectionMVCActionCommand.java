@@ -10,10 +10,13 @@ import com.liferay.portal.kernel.portlet.bridges.mvc.BaseMVCActionCommand;
 import com.liferay.portal.kernel.portlet.bridges.mvc.MVCActionCommand;
 import com.liferay.portal.kernel.service.ServiceContext;
 import com.liferay.portal.kernel.service.ServiceContextFactory;
+import com.liferay.portal.kernel.theme.ThemeDisplay;
 import com.liferay.portal.kernel.upload.FileItem;
 import com.liferay.portal.kernel.upload.UploadPortletRequest;
 import com.liferay.portal.kernel.util.ParamUtil;
 import com.liferay.portal.kernel.util.Portal;
+import com.liferay.portal.kernel.util.Validator;
+import com.liferay.portal.kernel.util.WebKeys;
 import com.liferay.saml.constants.SamlPortletKeys;
 import com.liferay.saml.opensaml.integration.field.expression.handler.registry.SamlSpIdpConnectionFieldExpressionHandlerRegistry;
 import com.liferay.saml.opensaml.integration.processor.SamlSpIdpConnectionProcessor;
@@ -51,19 +54,22 @@ public class UpdateIdentityProviderConnectionMVCActionCommand
 		UploadPortletRequest uploadPortletRequest =
 			_portal.getUploadPortletRequest(actionRequest);
 
-		long samlSpIdpConnectionId = ParamUtil.getLong(
-			uploadPortletRequest, "samlSpIdpConnectionId");
+		String samlIdpEntityId = ParamUtil.getString(
+			uploadPortletRequest, "samlIdpEntityId");
 
 		SamlSpIdpConnection samlSpIdpConnection = null;
 
-		if (samlSpIdpConnectionId <= 0) {
+		ThemeDisplay themeDisplay =
+			(ThemeDisplay)actionRequest.getAttribute(WebKeys.THEME_DISPLAY);
+
+		if (Validator.isNotNull(samlIdpEntityId)) {
 			samlSpIdpConnection =
 				_samlSpIdpConnectionLocalService.createSamlSpIdpConnection(0);
 		}
 		else {
 			samlSpIdpConnection =
 				_samlSpIdpConnectionLocalService.fetchSamlSpIdpConnection(
-					samlSpIdpConnectionId);
+					themeDisplay.getCompanyId(), samlIdpEntityId);
 		}
 
 		SamlSpIdpConnectionProcessor samlSpIdpConnectionProcessor =
