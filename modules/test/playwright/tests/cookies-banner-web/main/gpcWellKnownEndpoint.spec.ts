@@ -9,9 +9,9 @@ import {apiHelpersTest} from '../../../fixtures/apiHelpersTest';
 import {consentManagerConfigurationPageTest} from '../../../fixtures/consentManagerConfigurationPageTest';
 import {loginTest} from '../../../fixtures/loginTest';
 import {systemSettingsPageTest} from '../../../fixtures/systemSettingsPageTest';
-import {waitForAlert} from '../../../utils/waitForAlert';
 import {
 	resetAllConsentManagerConfigurations,
+	saveOrUpdateConfiguration,
 	updateConsentManagerConfiguration,
 } from './utils/consentManagerConfigurationHelper';
 
@@ -120,9 +120,7 @@ test(
 
 		await consentManagerConfigurationPage.globalPrivacyControlEnabledCheckbox.check();
 
-		await consentManagerConfigurationPage.updateButton.click();
-
-		await waitForAlert(page);
+		await saveOrUpdateConfiguration(true, page);
 
 		await expect(
 			consentManagerConfigurationPage.globalPrivacyControlEnabledCheckbox
