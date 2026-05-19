@@ -7,7 +7,9 @@ import {expect, mergeTests} from '@playwright/test';
 
 import {accountSettingsPagesTest} from '../../../fixtures/accountSettingsPagesTest';
 import {consentManagerConfigurationPageTest} from '../../../fixtures/consentManagerConfigurationPageTest';
+import {isolatedSiteTest} from '../../../fixtures/isolatedSiteTest';
 import {loginTest} from '../../../fixtures/loginTest';
+import {siteSettingsPagesTest} from '../../../fixtures/siteSettingsPagesTest';
 import {systemSettingsPageTest} from '../../../fixtures/systemSettingsPageTest';
 import {ConsentManagerConfigurationPage} from '../../../pages/cookies-banner-web/ConsentManagerConfigurationPage';
 import {waitForAlert} from '../../../utils/waitForAlert';
@@ -20,7 +22,9 @@ import {
 export const test = mergeTests(
 	accountSettingsPagesTest,
 	consentManagerConfigurationPageTest,
+	isolatedSiteTest,
 	loginTest(),
+	siteSettingsPagesTest,
 	systemSettingsPageTest
 );
 
@@ -366,6 +370,44 @@ test(
 					name: 'Cookie Panel',
 				})
 			).toBeVisible();
+		});
+	}
+);
+
+test(
+	'Enabling Consent Manager from Site Settings saves successfully and shows the banner on the site',
+	{tag: '@LPD-87281'},
+	async ({page, site, siteSettingsPage}) => {
+		await test.step('Navigate to Site Settings > Privacy > Consent Manager', async () => {
+			await siteSettingsPage.goToSiteSetting(
+				'Privacy',
+				'Consent Manager',
+				site.friendlyUrlPath
+			);
+		});
+
+		await test.step('Enable and save the Consent Manager configuration', async () => {
+			await page
+				.getByRole('checkbox', {exact: true, name: 'Enabled'})
+				.check();
+
+			await siteSettingsPage.saveConfiguration();
+		});
+
+		await test.step('Activate the Consent Manager', async () => {
+			await page
+				.getByRole('button', {exact: true, name: 'Activate'})
+				.click();
+
+			await waitForAlert(page);
+		});
+
+		await test.step('Verify the Consent Manager is now active', async () => {
+			await expect(
+				page.getByRole('button', {exact: true, name: 'Deactivate'})
+			).toBeVisible();
+
+			await expect(page.locator('.cookies-banner')).toBeVisible();
 		});
 	}
 );

@@ -63,10 +63,33 @@ public class CookiesPreferenceHandlingConfigurationFormRenderer
 
 		long companyId = _portal.getCompanyId(httpServletRequest);
 
+		ThemeDisplay themeDisplay =
+			(ThemeDisplay)httpServletRequest.getAttribute(
+				WebKeys.THEME_DISPLAY);
+
+		String portletId = PortalUtil.getPortletId(
+			(PortletRequest)httpServletRequest.getAttribute(
+				JavaConstants.JAKARTA_PORTLET_REQUEST));
+
+		ExtendedObjectClassDefinition.Scope scope =
+			ExtendedObjectClassDefinition.Scope.COMPANY;
+		long scopePK = themeDisplay.getCompanyId();
+
+		if (portletId.equals(ConfigurationAdminPortletKeys.SITE_SETTINGS)) {
+			scope = ExtendedObjectClassDefinition.Scope.GROUP;
+			scopePK = themeDisplay.getScopeGroupId();
+		}
+		else if (portletId.equals(
+					ConfigurationAdminPortletKeys.SYSTEM_SETTINGS)) {
+
+			scope = ExtendedObjectClassDefinition.Scope.SYSTEM;
+			scopePK = 0L;
+		}
+
 		long customFloatingIconImageId =
 			_cookiesConfigurationProvider.
 				getCookiesPreferenceHandlingCustomFloatingIconImageId(
-					_scope, companyId);
+					scope, scopePK);
 
 		long fileEntryId = ParamUtil.getLong(httpServletRequest, "fileEntryId");
 
