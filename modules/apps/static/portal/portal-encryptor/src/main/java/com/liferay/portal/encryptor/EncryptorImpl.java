@@ -10,6 +10,7 @@ import com.liferay.portal.kernel.encryptor.Encryptor;
 import com.liferay.portal.kernel.encryptor.EncryptorException;
 import com.liferay.portal.kernel.log.Log;
 import com.liferay.portal.kernel.log.LogFactoryUtil;
+import com.liferay.portal.kernel.security.fips.FIPSUtil;
 import com.liferay.portal.kernel.util.Base64;
 import com.liferay.portal.kernel.util.DigesterUtil;
 import com.liferay.portal.kernel.util.GetterUtil;
@@ -20,11 +21,13 @@ import com.liferay.portal.kernel.util.StringUtil;
 import java.security.Key;
 import java.security.SecureRandom;
 
+import java.util.Arrays;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
+import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
 import org.osgi.service.component.annotations.Component;
@@ -59,24 +62,28 @@ public class EncryptorImpl implements Encryptor {
 	public byte[] decryptUnencodedAsBytes(Key key, byte[] encryptedBytes)
 		throws EncryptorException {
 
-		String algorithm = key.getAlgorithm();
-
-		String cacheKey = algorithm + StringPool.POUND + key.toString();
-
-		Cipher cipher = _decryptCipherMap.get(cacheKey);
-
 		try {
-			if (cipher == null) {
-				cipher = Cipher.getInstance(algorithm);
 
-				cipher.init(Cipher.DECRYPT_MODE, key);
+			// When FIPS mode is enabled, ciphertext produced after the upgrade
+			// is prefixed with a GCM IV. Attempt the GCM format first and fall
+			// back to the legacy mode so values stored before FIPS was enabled
+			// remain readable.
 
-				_decryptCipherMap.put(cacheKey, cipher);
+			if (FIPSUtil.isEnabled()) {
+				try {
+					return _decryptGCM(key, encryptedBytes);
+				}
+				catch (Exception exception) {
+					if (_log.isDebugEnabled()) {
+						_log.debug(
+							"Falling back to legacy decryption after GCM " +
+								"failure",
+							exception);
+					}
+				}
 			}
 
-			synchronized (cipher) {
-				return cipher.doFinal(encryptedBytes);
-			}
+			return _decryptLegacy(key, encryptedBytes);
 		}
 		catch (Exception exception) {
 			throw new EncryptorException(exception);
@@ -109,13 +116,17 @@ public class EncryptorImpl implements Encryptor {
 	public byte[] encryptUnencoded(Key key, byte[] plainBytes)
 		throws EncryptorException {
 
-		String algorithm = key.getAlgorithm();
-
-		String cacheKey = algorithm + StringPool.POUND + key.toString();
-
-		Cipher cipher = _encryptCipherMap.get(cacheKey);
-
 		try {
+			if (FIPSUtil.isEnabled()) {
+				return _encryptGCM(key, plainBytes);
+			}
+
+			String algorithm = key.getAlgorithm();
+
+			String cacheKey = algorithm + StringPool.POUND + key.toString();
+
+			Cipher cipher = _encryptCipherMap.get(cacheKey);
+
 			if (cipher == null) {
 				cipher = Cipher.getInstance(algorithm);
 
@@ -157,6 +168,45 @@ public class EncryptorImpl implements Encryptor {
 		return Base64.encode(key.getEncoded());
 	}
 
+	private byte[] _decryptGCM(Key key, byte[] encryptedBytes)
+		throws Exception {
+
+		byte[] iv = Arrays.copyOfRange(
+			encryptedBytes, 0, FIPSUtil.GCM_IV_LENGTH);
+		byte[] cipherBytes = Arrays.copyOfRange(
+			encryptedBytes, FIPSUtil.GCM_IV_LENGTH, encryptedBytes.length);
+
+		Cipher cipher = Cipher.getInstance(FIPSUtil.GCM_TRANSFORMATION);
+
+		cipher.init(
+			Cipher.DECRYPT_MODE, key,
+			new GCMParameterSpec(FIPSUtil.GCM_TAG_LENGTH_BITS, iv));
+
+		return cipher.doFinal(cipherBytes);
+	}
+
+	private byte[] _decryptLegacy(Key key, byte[] encryptedBytes)
+		throws Exception {
+
+		String algorithm = key.getAlgorithm();
+
+		String cacheKey = algorithm + StringPool.POUND + key.toString();
+
+		Cipher cipher = _decryptCipherMap.get(cacheKey);
+
+		if (cipher == null) {
+			cipher = Cipher.getInstance(algorithm);
+
+			cipher.init(Cipher.DECRYPT_MODE, key);
+
+			_decryptCipherMap.put(cacheKey, cipher);
+		}
+
+		synchronized (cipher) {
+			return cipher.doFinal(encryptedBytes);
+		}
+	}
+
 	private String _decryptUnencodedAsString(Key key, byte[] encryptedBytes)
 		throws EncryptorException {
 
@@ -171,17 +221,52 @@ public class EncryptorImpl implements Encryptor {
 		}
 	}
 
+	private byte[] _encryptGCM(Key key, byte[] plainBytes) throws Exception {
+		byte[] iv = new byte[FIPSUtil.GCM_IV_LENGTH];
+
+		SecureRandom secureRandom = _getSecureRandom();
+
+		secureRandom.nextBytes(iv);
+
+		Cipher cipher = Cipher.getInstance(FIPSUtil.GCM_TRANSFORMATION);
+
+		cipher.init(
+			Cipher.ENCRYPT_MODE, key,
+			new GCMParameterSpec(FIPSUtil.GCM_TAG_LENGTH_BITS, iv));
+
+		byte[] cipherBytes = cipher.doFinal(plainBytes);
+
+		byte[] encryptedBytes = new byte[iv.length + cipherBytes.length];
+
+		System.arraycopy(iv, 0, encryptedBytes, 0, iv.length);
+		System.arraycopy(
+			cipherBytes, 0, encryptedBytes, iv.length, cipherBytes.length);
+
+		return encryptedBytes;
+	}
+
 	private Key _generateKey(String algorithm) throws EncryptorException {
 		try {
+			FIPSUtil.checkCipherAlgorithm(algorithm);
+			FIPSUtil.checkKeySize(algorithm, KEY_SIZE);
+
 			KeyGenerator keyGenerator = KeyGenerator.getInstance(algorithm);
 
-			keyGenerator.init(KEY_SIZE, new SecureRandom());
+			keyGenerator.init(KEY_SIZE, _getSecureRandom());
 
 			return keyGenerator.generateKey();
 		}
 		catch (Exception exception) {
 			throw new EncryptorException(exception);
 		}
+	}
+
+	private SecureRandom _getSecureRandom() throws Exception {
+		if (FIPSUtil.isEnabled()) {
+			return SecureRandom.getInstance("DEFAULT", "BCFIPS");
+		}
+
+		return new SecureRandom();
 	}
 
 	private static final Log _log = LogFactoryUtil.getLog(EncryptorImpl.class);

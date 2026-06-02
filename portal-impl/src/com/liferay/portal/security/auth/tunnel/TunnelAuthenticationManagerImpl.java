@@ -14,6 +14,7 @@ import com.liferay.portal.kernel.security.auth.AuthException;
 import com.liferay.portal.kernel.security.auth.RemoteAuthException;
 import com.liferay.portal.kernel.security.auth.http.HttpAuthorizationHeader;
 import com.liferay.portal.kernel.security.auth.tunnel.TunnelAuthenticationManager;
+import com.liferay.portal.kernel.security.fips.FIPSUtil;
 import com.liferay.portal.kernel.service.UserLocalServiceUtil;
 import com.liferay.portal.kernel.servlet.HttpHeaders;
 import com.liferay.portal.kernel.util.GetterUtil;
@@ -219,6 +220,25 @@ public class TunnelAuthenticationManagerImpl
 			}
 
 			AuthException authException = new AuthException(message);
+
+			authException.setType(AuthException.INVALID_SHARED_SECRET);
+
+			throw authException;
+		}
+
+		try {
+			FIPSUtil.checkCipherAlgorithm(
+				PropsValues.TUNNELING_SERVLET_ENCRYPTION_ALGORITHM);
+			FIPSUtil.checkKeySize(
+				PropsValues.TUNNELING_SERVLET_ENCRYPTION_ALGORITHM,
+				key.length * 8);
+		}
+		catch (SecurityException securityException) {
+			if (_log.isWarnEnabled()) {
+				_log.warn(securityException);
+			}
+
+			AuthException authException = new AuthException(securityException);
 
 			authException.setType(AuthException.INVALID_SHARED_SECRET);
 

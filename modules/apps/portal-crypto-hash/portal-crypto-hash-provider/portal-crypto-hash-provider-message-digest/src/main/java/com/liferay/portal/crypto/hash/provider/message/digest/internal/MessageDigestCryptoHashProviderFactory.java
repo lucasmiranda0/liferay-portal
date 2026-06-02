@@ -10,6 +10,7 @@ import com.liferay.portal.crypto.hash.spi.CryptoHashProvider;
 import com.liferay.portal.crypto.hash.spi.CryptoHashProviderFactory;
 import com.liferay.portal.crypto.hash.spi.CryptoHashProviderResponse;
 import com.liferay.portal.kernel.security.SecureRandomUtil;
+import com.liferay.portal.kernel.security.fips.FIPSUtil;
 import com.liferay.portal.kernel.util.ArrayUtil;
 import com.liferay.portal.kernel.util.MapUtil;
 
@@ -68,9 +69,10 @@ public class MessageDigestCryptoHashProviderFactory
 			_cryptoHashProviderProperties = cryptoHashProviderProperties;
 
 			_messageDigest = MessageDigest.getInstance(
-				MapUtil.getString(
-					cryptoHashProviderProperties, "message.digest.algorithm",
-					"SHA-256"));
+				FIPSUtil.checkDigestAlgorithm(
+					MapUtil.getString(
+						cryptoHashProviderProperties,
+						"message.digest.algorithm", "SHA-256")));
 			_saltSize = MapUtil.getInteger(
 				cryptoHashProviderProperties, "message.digest.salt.size", 32);
 		}

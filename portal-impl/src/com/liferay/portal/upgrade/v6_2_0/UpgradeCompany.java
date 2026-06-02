@@ -6,6 +6,7 @@
 package com.liferay.portal.upgrade.v6_2_0;
 
 import com.liferay.portal.kernel.encryptor.EncryptorUtil;
+import com.liferay.portal.kernel.security.fips.FIPSUtil;
 import com.liferay.portal.kernel.upgrade.UpgradeProcess;
 import com.liferay.portal.kernel.util.Base64;
 import com.liferay.portal.kernel.util.GetterUtil;
@@ -32,6 +33,12 @@ public class UpgradeCompany extends UpgradeProcess {
 		if (keyAlgorithm.equals("DES")) {
 			return;
 		}
+
+		FIPSUtil.checkCipherAlgorithm(keyAlgorithm);
+		FIPSUtil.checkKeySize(
+			keyAlgorithm,
+			GetterUtil.getInteger(
+				PropsUtil.get(PropsKeys.COMPANY_ENCRYPTION_KEY_SIZE)));
 
 		upgradeKey();
 	}
