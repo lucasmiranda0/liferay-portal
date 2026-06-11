@@ -11,6 +11,7 @@ import com.liferay.portal.kernel.encryptor.EncryptorException;
 import com.liferay.portal.kernel.log.Log;
 import com.liferay.portal.kernel.log.LogFactoryUtil;
 import com.liferay.portal.kernel.security.SecureRandomUtil;
+import com.liferay.portal.kernel.security.fips.FIPSModeUtil;
 import com.liferay.portal.kernel.util.Base64;
 import com.liferay.portal.kernel.util.DigesterUtil;
 import com.liferay.portal.kernel.util.GetterUtil;
@@ -20,6 +21,7 @@ import com.liferay.portal.kernel.util.PropsValues;
 import com.liferay.portal.kernel.util.StringUtil;
 
 import java.security.Key;
+import java.security.spec.AlgorithmParameterSpec;
 
 import java.util.Arrays;
 import java.util.Map;
@@ -64,21 +66,7 @@ public class EncryptorImpl implements Encryptor {
 
 		if (PropsValues.FIPS_ENABLED) {
 			try {
-				Cipher cipher = Cipher.getInstance(_GCM_CIPHER_TRANSFORMATION);
-
-				byte[] cipherBytes = Arrays.copyOfRange(
-					encryptedBytes, _GCM_INITIALIZATION_VECTOR_LENGTH,
-					encryptedBytes.length);
-
-				byte[] initializationVector = Arrays.copyOfRange(
-					encryptedBytes, 0, _GCM_INITIALIZATION_VECTOR_LENGTH);
-
-				cipher.init(
-					Cipher.DECRYPT_MODE, key,
-					new GCMParameterSpec(
-						_GCM_TAG_LENGTH_BITS, initializationVector));
-
-				return cipher.doFinal(cipherBytes);
+				return _decryptGCM(key, encryptedBytes);
 			}
 			catch (Exception exception) {
 				if (_log.isDebugEnabled()) {
@@ -115,11 +103,14 @@ public class EncryptorImpl implements Encryptor {
 
 	@Override
 	public Key deserializeKey(String base64String) {
+		if (!FIPSModeUtil.isApprovedCipherAlgorithm(KEY_ALGORITHM)) {
+			throw new SecurityException(
+				"Algorithm \"" + KEY_ALGORITHM + "\" is not FIPS-approved");
+		}
+
 		byte[] bytes = Base64.decode(base64String);
 
-		return new SecretKeySpec(
-			bytes,
-			PropsValues.FIPS_ENABLED ? _AES : EncryptorImpl.KEY_ALGORITHM);
+		return new SecretKeySpec(bytes, KEY_ALGORITHM);
 	}
 
 	@Override
@@ -141,37 +132,11 @@ public class EncryptorImpl implements Encryptor {
 	public byte[] encryptUnencoded(Key key, byte[] plainBytes)
 		throws EncryptorException {
 
+		if (PropsValues.FIPS_ENABLED) {
+			return _encryptGCM(key, plainBytes);
+		}
+
 		try {
-			if (PropsValues.FIPS_ENABLED) {
-				byte[] initializationVector =
-					new byte[_GCM_INITIALIZATION_VECTOR_LENGTH];
-
-				for (int i = 0; i < initializationVector.length; i++) {
-					initializationVector[i] = SecureRandomUtil.nextByte();
-				}
-
-				Cipher cipher = Cipher.getInstance(_GCM_CIPHER_TRANSFORMATION);
-
-				cipher.init(
-					Cipher.ENCRYPT_MODE, key,
-					new GCMParameterSpec(
-						_GCM_TAG_LENGTH_BITS, initializationVector));
-
-				byte[] cipherBytes = cipher.doFinal(plainBytes);
-
-				byte[] encryptedBytes =
-					new byte[initializationVector.length + cipherBytes.length];
-
-				System.arraycopy(
-					initializationVector, 0, encryptedBytes, 0,
-					initializationVector.length);
-				System.arraycopy(
-					cipherBytes, 0, encryptedBytes, initializationVector.length,
-					cipherBytes.length);
-
-				return encryptedBytes;
-			}
-
 			String algorithm = key.getAlgorithm();
 
 			String cacheKey = algorithm + StringPool.POUND + key;
@@ -211,12 +176,49 @@ public class EncryptorImpl implements Encryptor {
 
 	@Override
 	public Key generateKey() throws EncryptorException {
-		return _generateKey(PropsValues.FIPS_ENABLED ? _AES : KEY_ALGORITHM);
+		if (!FIPSModeUtil.isApprovedCipherAlgorithm(KEY_ALGORITHM)) {
+			throw new SecurityException(
+				"Algorithm \"" + KEY_ALGORITHM + "\" is not FIPS-approved");
+		}
+
+		return _generateKey(KEY_ALGORITHM);
 	}
 
 	@Override
 	public String serializeKey(Key key) {
 		return Base64.encode(key.getEncoded());
+	}
+
+	private byte[] _decryptGCM(Key key, byte[] encryptedBytes)
+		throws EncryptorException {
+
+		byte[] cipherBytes = Arrays.copyOfRange(
+			encryptedBytes, _GCM_INITIALIZATION_VECTOR_LENGTH,
+			encryptedBytes.length);
+
+		byte[] initializationVector = Arrays.copyOfRange(
+			encryptedBytes, 0, _GCM_INITIALIZATION_VECTOR_LENGTH);
+
+		return _decryptUnencodedAsBytes(
+			key, cipherBytes, _GCM_CIPHER_TRANSFORMATION,
+			new GCMParameterSpec(_GCM_TAG_LENGTH_BITS, initializationVector));
+	}
+
+	private byte[] _decryptUnencodedAsBytes(
+			Key key, byte[] encryptedBytes, String transformation,
+			AlgorithmParameterSpec algorithmParameterSpec)
+		throws EncryptorException {
+
+		try {
+			Cipher cipher = Cipher.getInstance(transformation);
+
+			cipher.init(Cipher.DECRYPT_MODE, key, algorithmParameterSpec);
+
+			return cipher.doFinal(encryptedBytes);
+		}
+		catch (Exception exception) {
+			throw new EncryptorException(exception);
+		}
 	}
 
 	private String _decryptUnencodedAsString(Key key, byte[] encryptedBytes)
@@ -227,6 +229,50 @@ public class EncryptorImpl implements Encryptor {
 				key, encryptedBytes);
 
 			return new String(decryptedBytes, ENCODING);
+		}
+		catch (Exception exception) {
+			throw new EncryptorException(exception);
+		}
+	}
+
+	private byte[] _encryptGCM(Key key, byte[] plainBytes)
+		throws EncryptorException {
+
+		byte[] initializationVector =
+			new byte[_GCM_INITIALIZATION_VECTOR_LENGTH];
+
+		for (int i = 0; i < initializationVector.length; i++) {
+			initializationVector[i] = SecureRandomUtil.nextByte();
+		}
+
+		byte[] cipherBytes = _encryptUnencoded(
+			key, plainBytes, _GCM_CIPHER_TRANSFORMATION,
+			new GCMParameterSpec(_GCM_TAG_LENGTH_BITS, initializationVector));
+
+		byte[] encryptedBytes =
+			new byte[initializationVector.length + cipherBytes.length];
+
+		System.arraycopy(
+			initializationVector, 0, encryptedBytes, 0,
+			initializationVector.length);
+		System.arraycopy(
+			cipherBytes, 0, encryptedBytes, initializationVector.length,
+			cipherBytes.length);
+
+		return encryptedBytes;
+	}
+
+	private byte[] _encryptUnencoded(
+			Key key, byte[] plainBytes, String transformation,
+			AlgorithmParameterSpec algorithmParameterSpec)
+		throws EncryptorException {
+
+		try {
+			Cipher cipher = Cipher.getInstance(transformation);
+
+			cipher.init(Cipher.ENCRYPT_MODE, key, algorithmParameterSpec);
+
+			return cipher.doFinal(plainBytes);
 		}
 		catch (Exception exception) {
 			throw new EncryptorException(exception);
@@ -246,8 +292,6 @@ public class EncryptorImpl implements Encryptor {
 			throw new EncryptorException(exception);
 		}
 	}
-
-	private static final String _AES = "AES";
 
 	private static final int _AES_KEY_SIZE = 256;
 
