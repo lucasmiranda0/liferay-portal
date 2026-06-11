@@ -103,9 +103,10 @@ public class EncryptorImpl implements Encryptor {
 
 	@Override
 	public Key deserializeKey(String base64String) {
-		if (!FIPSModeUtil.isApprovedCipherAlgorithm(KEY_ALGORITHM)) {
+		if (!FIPSModeUtil.isAllowedAlgorithm(KEY_ALGORITHM)) {
 			throw new SecurityException(
-				"Algorithm \"" + KEY_ALGORITHM + "\" is not FIPS-approved");
+				"Algorithm \"" + KEY_ALGORITHM +
+					"\" is not allowed in FIPS mode");
 		}
 
 		byte[] bytes = Base64.decode(base64String);
@@ -176,9 +177,10 @@ public class EncryptorImpl implements Encryptor {
 
 	@Override
 	public Key generateKey() throws EncryptorException {
-		if (!FIPSModeUtil.isApprovedCipherAlgorithm(KEY_ALGORITHM)) {
+		if (!FIPSModeUtil.isAllowedAlgorithm(KEY_ALGORITHM)) {
 			throw new SecurityException(
-				"Algorithm \"" + KEY_ALGORITHM + "\" is not FIPS-approved");
+				"Algorithm \"" + KEY_ALGORITHM +
+					"\" is not allowed in FIPS mode");
 		}
 
 		return _generateKey(KEY_ALGORITHM);

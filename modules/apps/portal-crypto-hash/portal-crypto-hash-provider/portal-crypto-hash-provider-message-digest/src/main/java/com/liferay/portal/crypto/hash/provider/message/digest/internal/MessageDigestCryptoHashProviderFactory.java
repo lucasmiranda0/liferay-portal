@@ -73,9 +73,10 @@ public class MessageDigestCryptoHashProviderFactory
 				cryptoHashProviderProperties, "message.digest.algorithm",
 				DigesterUtil.SHA_256);
 
-			if (!FIPSModeUtil.isApprovedPasswordAlgorithm(algorithm)) {
+			if (!FIPSModeUtil.isAllowedAlgorithm(algorithm)) {
 				throw new SecurityException(
-					"Algorithm \"" + algorithm + "\" is not FIPS-approved");
+					"Algorithm \"" + algorithm +
+						"\" is not allowed in FIPS mode");
 			}
 
 			_messageDigest = MessageDigest.getInstance(algorithm);
