@@ -4,4 +4,10 @@
 	<checkstyle>
 		<suppress checks="StaticVariableNameCheck" files="portal-security-service-access-policy-api/src/main/java/com/liferay/portal/security/service/access/policy/constants/SAPActionKeys\.java" />
 	</checkstyle>
+	<source-check>
+		<suppress checks="BNDBundleInformationCheck" files="portal-security-fips-rest-api/bnd\.bnd" />
+		<suppress checks="BNDBundleInformationCheck" files="portal-security-fips-rest-client/bnd\.bnd" />
+		<suppress checks="BNDBundleInformationCheck" files="portal-security-fips-rest-impl/bnd\.bnd" />
+		<suppress checks="BNDBundleInformationCheck" files="portal-security-fips-rest-test/bnd\.bnd" />
+	</source-check>
 </suppressions>
