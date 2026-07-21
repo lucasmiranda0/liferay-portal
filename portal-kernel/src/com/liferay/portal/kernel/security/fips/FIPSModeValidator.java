@@ -34,6 +34,45 @@ import java.util.regex.Pattern;
  */
 public class FIPSModeValidator {
 
+	public static boolean isInErrorState() {
+		return _fipsErrorState;
+	}
+
+	public static FIPSHealthCheckResult runSelfTests() {
+		if (!PropsValues.FIPS_ENABLED) {
+			return FIPSHealthCheckResult.notApplicable();
+		}
+
+		synchronized (_selfTestLock) {
+			if (_fipsErrorState) {
+				return FIPSHealthCheckResult.failed(
+					null, "already-in-error-state", null,
+					"FIPS is already in error state");
+			}
+
+			try {
+				String providerName = _fipsSelfTestExecutor.execute();
+
+				return FIPSHealthCheckResult.healthy(providerName);
+			}
+			catch (FIPSSelfTestException fipsSelfTestException) {
+				_fipsErrorState = true;
+
+				return FIPSHealthCheckResult.failed(
+					fipsSelfTestException.getProviderName(),
+					fipsSelfTestException.getFailedTest(),
+					fipsSelfTestException.getFipsState(),
+					fipsSelfTestException.getProviderMessage());
+			}
+			catch (Exception exception) {
+				_fipsErrorState = true;
+
+				return FIPSHealthCheckResult.failed(
+					null, "self-test-execution", null, exception.getMessage());
+			}
+		}
+	}
+
 	public static void validate() {
 		Provider[] providers = Security.getProviders();
 
@@ -44,6 +83,8 @@ public class FIPSModeValidator {
 	}
 
 	public static void validateAlgorithm(String algorithm) {
+		_checkErrorState();
+
 		if (!PropsValues.FIPS_ENABLED) {
 			return;
 		}
@@ -61,6 +102,8 @@ public class FIPSModeValidator {
 	}
 
 	public static void validateKey(String algorithm, int keySize) {
+		_checkErrorState();
+
 		if (!PropsValues.FIPS_ENABLED) {
 			return;
 		}
@@ -70,6 +113,13 @@ public class FIPSModeValidator {
 		if ((keySize != 0) && !_allowedKeySizes.contains(keySize)) {
 			throw new SecurityException(
 				"AES key must be 128, 192, or 256 bits");
+		}
+	}
+
+	private static void _checkErrorState() {
+		if (_fipsErrorState) {
+			throw new SecurityException(
+				"FIPS error state - cryptographic operations are halted");
 		}
 	}
 
@@ -270,7 +320,13 @@ public class FIPSModeValidator {
 			List.of(
 				"BCJSSE", "JdkLDAP", "JdkSASL", "SUN", "SunJCE", "SunJGSS",
 				"SunSASL", "XMLDSig"));
+	private static volatile boolean _fipsErrorState;
+	private static final FIPSSelfTestExecutor _fipsSelfTestExecutor = () -> {
+		throw new FIPSSelfTestException(
+			null, "not-implemented", null, "Reflective executor not yet wired");
+	};
 	private static final Pattern _pbkdf2Pattern = Pattern.compile(
 		"^[^/]*(?:/([0-9]+))?/([0-9]+)$");
+	private static final Object _selfTestLock = new Object();
 
 }
