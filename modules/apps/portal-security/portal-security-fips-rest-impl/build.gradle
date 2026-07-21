@@ -10,6 +10,7 @@ dependencies {
 	compileOnly project(":apps:portal-odata:portal-odata-api")
 	compileOnly project(":apps:portal-security:portal-security-fips-rest-api")
 	compileOnly project(":apps:portal-vulcan:portal-vulcan-api")
+	compileOnly project(":apps:portal:portal-instance-lifecycle-api")
 	compileOnly project(":core:petra:petra-function")
 	testImplementation group: "org.mockito", name: "mockito-core", version: "5.4.0"
 }
