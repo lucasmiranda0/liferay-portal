@@ -321,10 +321,8 @@ public class FIPSModeValidator {
 				"BCJSSE", "JdkLDAP", "JdkSASL", "SUN", "SunJCE", "SunJGSS",
 				"SunSASL", "XMLDSig"));
 	private static volatile boolean _fipsErrorState;
-	private static final FIPSSelfTestExecutor _fipsSelfTestExecutor = () -> {
-		throw new FIPSSelfTestException(
-			null, "not-implemented", null, "Reflective executor not yet wired");
-	};
+	private static final FIPSSelfTestExecutor _fipsSelfTestExecutor =
+		new ReflectionFIPSSelfTestExecutor();
 	private static final Pattern _pbkdf2Pattern = Pattern.compile(
 		"^[^/]*(?:/([0-9]+))?/([0-9]+)$");
 	private static final Object _selfTestLock = new Object();
