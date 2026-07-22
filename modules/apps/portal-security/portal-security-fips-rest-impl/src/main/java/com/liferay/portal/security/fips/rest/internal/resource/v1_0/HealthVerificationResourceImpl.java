@@ -15,7 +15,7 @@ import com.liferay.portal.kernel.security.fips.FIPSHealthCheckResult;
 import com.liferay.portal.kernel.security.fips.FIPSModeValidator;
 import com.liferay.portal.kernel.security.permission.PermissionChecker;
 import com.liferay.portal.kernel.security.permission.PermissionThreadLocal;
-import com.liferay.portal.kernel.service.permission.PortalPermissionUtil;
+import com.liferay.portal.kernel.service.RoleLocalService;
 import com.liferay.portal.security.fips.rest.dto.v1_0.HealthVerification;
 import com.liferay.portal.security.fips.rest.internal.audit.FIPSHealthAuditMessageBuilder;
 import com.liferay.portal.security.fips.rest.internal.constants.FIPSActionKeys;
@@ -45,9 +45,10 @@ public class HealthVerificationResourceImpl
 		PermissionChecker permissionChecker =
 			PermissionThreadLocal.getPermissionChecker();
 
-		if (!PortalPermissionUtil.contains(
-				permissionChecker,
-				FIPSActionKeys.TRIGGER_HEALTH_VERIFICATION)) {
+		if (!permissionChecker.isOmniadmin() &&
+			!_roleLocalService.hasUserRole(
+				permissionChecker.getUserId(), permissionChecker.getCompanyId(),
+				FIPSActionKeys.CRYPTO_OFFICER_ROLE_NAME, true)) {
 
 			throw new PrincipalException.MustHavePermission(
 				permissionChecker, FIPSActionKeys.TRIGGER_HEALTH_VERIFICATION);
@@ -121,5 +122,8 @@ public class HealthVerificationResourceImpl
 
 	@Reference
 	private JSONFactory _jsonFactory;
+
+	@Reference
+	private RoleLocalService _roleLocalService;
 
 }

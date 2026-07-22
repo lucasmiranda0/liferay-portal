@@ -10,6 +10,8 @@ package com.liferay.portal.security.fips.rest.internal.constants;
  */
 public class FIPSActionKeys {
 
+	public static final String CRYPTO_OFFICER_ROLE_NAME = "Crypto Officer";
+
 	public static final String TRIGGER_HEALTH_VERIFICATION =
 		"TRIGGER_HEALTH_VERIFICATION";
 
