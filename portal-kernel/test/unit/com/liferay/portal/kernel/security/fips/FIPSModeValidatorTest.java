@@ -15,6 +15,7 @@ import java.security.Provider;
 import java.util.List;
 import java.util.Map;
 
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.function.ThrowingRunnable;
@@ -23,6 +24,15 @@ import org.junit.function.ThrowingRunnable;
  * @author Caio Farias
  */
 public class FIPSModeValidatorTest {
+
+	@After
+	public void tearDown() {
+		ReflectionTestUtil.setFieldValue(
+			FIPSModeValidator.class, "_fipsErrorState", false);
+		ReflectionTestUtil.setFieldValue(
+			FIPSModeValidator.class, "_fipsSelfTestExecutor",
+			new ReflectionFIPSSelfTestExecutor());
+	}
 
 	@Test
 	public void testRunSelfTestsFailsClosedOnUnexpectedError() {
