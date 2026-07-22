@@ -25,6 +25,98 @@ import org.junit.function.ThrowingRunnable;
 public class FIPSModeValidatorTest {
 
 	@Test
+	public void testRunSelfTestsFailsClosedOnUnexpectedError() {
+		try (SafeCloseable safeCloseable =
+				PropsValuesTestUtil.swapWithSafeCloseable(
+					"FIPS_ENABLED", true)) {
+
+			_swapExecutor(
+				() -> {
+					throw new RuntimeException("reflection blew up");
+				});
+
+			FIPSHealthCheckResult result = FIPSModeValidator.runSelfTests();
+
+			Assert.assertEquals(
+				FIPSHealthCheckResult.Status.FAILED, result.getStatus());
+
+			Assert.assertTrue(FIPSModeValidator.isInErrorState());
+		}
+		finally {
+			_resetErrorState();
+		}
+	}
+
+	@Test
+	public void testRunSelfTestsFailureEntersErrorState() {
+		try (SafeCloseable safeCloseable =
+				PropsValuesTestUtil.swapWithSafeCloseable(
+					"FIPS_ENABLED", true)) {
+
+			_swapExecutor(
+				() -> {
+					throw new FIPSSelfTestException(
+						"BCFIPS", "AES-KAT", "ERROR", "integrity failure");
+				});
+
+			FIPSHealthCheckResult result = FIPSModeValidator.runSelfTests();
+
+			Assert.assertEquals(
+				FIPSHealthCheckResult.Status.FAILED, result.getStatus());
+			Assert.assertEquals("AES-KAT", result.getFailedTest());
+
+			Assert.assertTrue(FIPSModeValidator.isInErrorState());
+
+			_assertSecurityException(
+				"cryptographic operations are halted",
+				() -> FIPSModeValidator.validateAlgorithm("AES"));
+			_assertSecurityException(
+				"cryptographic operations are halted",
+				() -> FIPSModeValidator.validateKey("AES", 128));
+		}
+		finally {
+			_resetErrorState();
+		}
+	}
+
+	@Test
+	public void testRunSelfTestsNotApplicableWhenFIPSDisabled() {
+		try (SafeCloseable safeCloseable =
+				PropsValuesTestUtil.swapWithSafeCloseable(
+					"FIPS_ENABLED", false)) {
+
+			FIPSHealthCheckResult result = FIPSModeValidator.runSelfTests();
+
+			Assert.assertEquals(
+				FIPSHealthCheckResult.Status.NOT_APPLICABLE,
+				result.getStatus());
+
+			Assert.assertFalse(FIPSModeValidator.isInErrorState());
+		}
+	}
+
+	@Test
+	public void testRunSelfTestsSuccess() {
+		try (SafeCloseable safeCloseable =
+				PropsValuesTestUtil.swapWithSafeCloseable(
+					"FIPS_ENABLED", true)) {
+
+			_swapExecutor(() -> "BCFIPS");
+
+			FIPSHealthCheckResult result = FIPSModeValidator.runSelfTests();
+
+			Assert.assertEquals(
+				FIPSHealthCheckResult.Status.HEALTHY, result.getStatus());
+			Assert.assertEquals("BCFIPS", result.getProviderName());
+
+			Assert.assertFalse(FIPSModeValidator.isInErrorState());
+		}
+		finally {
+			_resetErrorState();
+		}
+	}
+
+	@Test
 	public void testValidateAlgorithm() {
 		try (SafeCloseable safeCloseable =
 				PropsValuesTestUtil.swapWithSafeCloseable(
@@ -173,6 +265,17 @@ public class FIPSModeValidatorTest {
 			name, RandomTestUtil.randomString(),
 			RandomTestUtil.randomString()) {
 		};
+	}
+
+	private void _resetErrorState() {
+		ReflectionTestUtil.setFieldValue(
+			FIPSModeValidator.class, "_fipsErrorState", false);
+	}
+
+	private void _swapExecutor(FIPSSelfTestExecutor fipsSelfTestExecutor) {
+		ReflectionTestUtil.setFieldValue(
+			FIPSModeValidator.class, "_fipsSelfTestExecutor",
+			fipsSelfTestExecutor);
 	}
 
 }
