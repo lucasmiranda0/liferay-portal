@@ -7,6 +7,8 @@ package com.liferay.portal.kernel.security.fips;
 
 import com.liferay.petra.reflect.ReflectionUtil;
 import com.liferay.petra.string.StringBundler;
+import com.liferay.portal.kernel.log.Log;
+import com.liferay.portal.kernel.log.LogFactoryUtil;
 import com.liferay.portal.kernel.security.pwd.PasswordEncryptor;
 import com.liferay.portal.kernel.util.ArrayUtil;
 import com.liferay.portal.kernel.util.GetterUtil;
@@ -34,6 +36,28 @@ import java.util.regex.Pattern;
  */
 public class FIPSModeValidator {
 
+	public static void enterErrorState(
+		String errorSource, String fipsState, String providerMessage) {
+
+		synchronized (_errorStateLock) {
+			if (_fipsErrorState) {
+				return;
+			}
+
+			_fipsErrorState = true;
+		}
+
+		_log.error(
+			StringBundler.concat(
+				"FIPS entered error state. Cryptographic operations are ",
+				"halted. Error source: ", errorSource, ", FIPS state: ",
+				fipsState, ", provider message: ", providerMessage));
+	}
+
+	public static boolean isInErrorState() {
+		return _fipsErrorState;
+	}
+
 	public static void validate() {
 		Provider[] providers = Security.getProviders();
 
@@ -44,6 +68,8 @@ public class FIPSModeValidator {
 	}
 
 	public static void validateAlgorithm(String algorithm) {
+		_checkErrorState();
+
 		if (!PropsValues.FIPS_ENABLED) {
 			return;
 		}
@@ -61,6 +87,8 @@ public class FIPSModeValidator {
 	}
 
 	public static void validateKey(String algorithm, int keySize) {
+		_checkErrorState();
+
 		if (!PropsValues.FIPS_ENABLED) {
 			return;
 		}
@@ -70,6 +98,13 @@ public class FIPSModeValidator {
 		if ((keySize != 0) && !_allowedKeySizes.contains(keySize)) {
 			throw new SecurityException(
 				"AES key must be 128, 192, or 256 bits");
+		}
+	}
+
+	private static void _checkErrorState() {
+		if (_fipsErrorState) {
+			throw new SecurityException(
+				"FIPS error state - cryptographic operations are halted");
 		}
 	}
 
@@ -255,6 +290,9 @@ public class FIPSModeValidator {
 	private static final int _PASSWORDS_ENCRYPTION_ALGORITHM_ROUNDS_MIN =
 		1300000;
 
+	private static final Log _log = LogFactoryUtil.getLog(
+		FIPSModeValidator.class);
+
 	private static final Set<String> _allowedAlgorithms = Set.of(
 		"AES", "HmacSHA256", "HmacSHA384", "HmacSHA512", "PBKDF2WithHmacSHA256",
 		"PBKDF2WithHmacSHA384", "PBKDF2WithHmacSHA512", "SHA-256", "SHA-384",
@@ -270,6 +308,8 @@ public class FIPSModeValidator {
 			List.of(
 				"BCJSSE", "JdkLDAP", "JdkSASL", "SUN", "SunJCE", "SunJGSS",
 				"SunSASL", "XMLDSig"));
+	private static final Object _errorStateLock = new Object();
+	private static volatile boolean _fipsErrorState;
 	private static final Pattern _pbkdf2Pattern = Pattern.compile(
 		"^[^/]*(?:/([0-9]+))?/([0-9]+)$");
 

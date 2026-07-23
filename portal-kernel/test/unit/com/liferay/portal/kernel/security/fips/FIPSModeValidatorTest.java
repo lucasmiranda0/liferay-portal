@@ -9,12 +9,16 @@ import com.liferay.petra.lang.SafeCloseable;
 import com.liferay.portal.kernel.test.ReflectionTestUtil;
 import com.liferay.portal.kernel.test.util.PropsValuesTestUtil;
 import com.liferay.portal.kernel.test.util.RandomTestUtil;
+import com.liferay.portal.test.log.LogCapture;
+import com.liferay.portal.test.log.LogEntry;
+import com.liferay.portal.test.log.LoggerTestUtil;
 
 import java.security.Provider;
 
 import java.util.List;
 import java.util.Map;
 
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.function.ThrowingRunnable;
@@ -23,6 +27,69 @@ import org.junit.function.ThrowingRunnable;
  * @author Caio Farias
  */
 public class FIPSModeValidatorTest {
+
+	@After
+	public void tearDown() {
+		ReflectionTestUtil.setFieldValue(
+			FIPSModeValidator.class, "_fipsErrorState", false);
+	}
+
+	@Test
+	public void testEnterErrorStateHaltsGuardedOperations() {
+		try (LogCapture logCapture = LoggerTestUtil.configureLog4JLogger(
+				FIPSModeValidator.class.getName(), LoggerTestUtil.ERROR)) {
+
+			FIPSModeValidator.enterErrorState(
+				"periodic-health-failure", "not-ready",
+				"KAT verification failed");
+
+			List<LogEntry> logEntries = logCapture.getLogEntries();
+
+			Assert.assertEquals(logEntries.toString(), 1, logEntries.size());
+
+			LogEntry logEntry = logEntries.get(0);
+
+			String message = logEntry.getMessage();
+
+			Assert.assertTrue(
+				message, message.contains("periodic-health-failure"));
+			Assert.assertTrue(message, message.contains("not-ready"));
+			Assert.assertTrue(
+				message, message.contains("KAT verification failed"));
+		}
+
+		Assert.assertTrue(FIPSModeValidator.isInErrorState());
+
+		_assertSecurityException(
+			"FIPS error state - cryptographic operations are halted",
+			() -> FIPSModeValidator.validateAlgorithm("AES"));
+		_assertSecurityException(
+			"FIPS error state - cryptographic operations are halted",
+			() -> FIPSModeValidator.validateKey("AES", 128));
+	}
+
+	@Test
+	public void testEnterErrorStateIsIdempotent() {
+		try (LogCapture logCapture = LoggerTestUtil.configureLog4JLogger(
+				FIPSModeValidator.class.getName(), LoggerTestUtil.ERROR)) {
+
+			FIPSModeValidator.enterErrorState("first", null, null);
+			FIPSModeValidator.enterErrorState("second", null, null);
+
+			List<LogEntry> logEntries = logCapture.getLogEntries();
+
+			Assert.assertEquals(logEntries.toString(), 1, logEntries.size());
+
+			LogEntry logEntry = logEntries.get(0);
+
+			String message = logEntry.getMessage();
+
+			Assert.assertTrue(message, message.contains("first"));
+			Assert.assertFalse(message, message.contains("second"));
+		}
+
+		Assert.assertTrue(FIPSModeValidator.isInErrorState());
+	}
 
 	@Test
 	public void testValidateAlgorithm() {
