@@ -33,6 +33,13 @@ public class FIPSApplicationStateMachineUtil {
 		_fipsApplicationStateMachine.transition(fipsApplicationState);
 	}
 
+	public static FIPSApplicationState transitionOrGetBlockingState(
+		FIPSApplicationState fipsApplicationState) {
+
+		return _fipsApplicationStateMachine.transitionOrGetBlockingState(
+			fipsApplicationState);
+	}
+
 	private static final FIPSApplicationStateMachine
 		_fipsApplicationStateMachine = new FIPSApplicationStateMachine();
 

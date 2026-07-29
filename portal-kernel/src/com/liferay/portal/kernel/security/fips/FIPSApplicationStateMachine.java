@@ -36,6 +36,21 @@ public class FIPSApplicationStateMachine {
 		_fipsApplicationState = fipsApplicationState;
 	}
 
+	public synchronized FIPSApplicationState transitionOrGetBlockingState(
+		FIPSApplicationState fipsApplicationState) {
+
+		Set<FIPSApplicationState> nextFIPSApplicationStates =
+			_allowedTransitions.get(_fipsApplicationState);
+
+		if (!nextFIPSApplicationStates.contains(fipsApplicationState)) {
+			return _fipsApplicationState;
+		}
+
+		_fipsApplicationState = fipsApplicationState;
+
+		return null;
+	}
+
 	private static final Map<FIPSApplicationState, Set<FIPSApplicationState>>
 		_allowedTransitions = Map.of(
 			FIPSApplicationState.ERROR, Set.of(FIPSApplicationState.POWER_OFF),
@@ -44,7 +59,9 @@ public class FIPSApplicationStateMachine {
 				FIPSApplicationState.ERROR, FIPSApplicationState.POWER_OFF,
 				FIPSApplicationState.SELF_TEST),
 			FIPSApplicationState.OPERATIONAL,
-			Set.of(FIPSApplicationState.ERROR, FIPSApplicationState.POWER_OFF),
+			Set.of(
+				FIPSApplicationState.ERROR, FIPSApplicationState.POWER_OFF,
+				FIPSApplicationState.SELF_TEST),
 			FIPSApplicationState.POWER_OFF, Set.of(),
 			FIPSApplicationState.SELF_TEST,
 			Set.of(
