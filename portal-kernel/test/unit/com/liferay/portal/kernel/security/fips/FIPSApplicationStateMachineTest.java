@@ -40,8 +40,19 @@ public class FIPSApplicationStateMachineTest {
 		_assertIllegalTransition(
 			FIPSApplicationState.OPERATIONAL,
 			FIPSApplicationState.INITIALIZING);
-		_assertIllegalTransition(
-			FIPSApplicationState.OPERATIONAL, FIPSApplicationState.SELF_TEST);
+	}
+
+	@Test
+	public void testOnDemandSelfTestTransition() {
+		FIPSApplicationStateMachine fipsApplicationStateMachine =
+			_createFIPSApplicationStateMachine(
+				FIPSApplicationState.OPERATIONAL);
+
+		_assertAllowedTransition(
+			fipsApplicationStateMachine, FIPSApplicationState.SELF_TEST);
+
+		_assertAllowedTransition(
+			fipsApplicationStateMachine, FIPSApplicationState.OPERATIONAL);
 	}
 
 	@Test
@@ -57,6 +68,39 @@ public class FIPSApplicationStateMachineTest {
 			_assertIllegalTransition(
 				FIPSApplicationState.POWER_OFF, fipsApplicationState);
 		}
+	}
+
+	@Test
+	public void testTransitionOrGetBlockingState() {
+		FIPSApplicationStateMachine fipsApplicationStateMachine =
+			_createFIPSApplicationStateMachine(
+				FIPSApplicationState.OPERATIONAL);
+
+		Assert.assertNull(
+			fipsApplicationStateMachine.transitionOrGetBlockingState(
+				FIPSApplicationState.SELF_TEST));
+		Assert.assertEquals(
+			FIPSApplicationState.SELF_TEST,
+			fipsApplicationStateMachine.getFIPSApplicationState());
+
+		Assert.assertEquals(
+			FIPSApplicationState.SELF_TEST,
+			fipsApplicationStateMachine.transitionOrGetBlockingState(
+				FIPSApplicationState.SELF_TEST));
+		Assert.assertEquals(
+			FIPSApplicationState.SELF_TEST,
+			fipsApplicationStateMachine.getFIPSApplicationState());
+
+		fipsApplicationStateMachine = _createFIPSApplicationStateMachine(
+			FIPSApplicationState.ERROR);
+
+		Assert.assertEquals(
+			FIPSApplicationState.ERROR,
+			fipsApplicationStateMachine.transitionOrGetBlockingState(
+				FIPSApplicationState.SELF_TEST));
+		Assert.assertEquals(
+			FIPSApplicationState.ERROR,
+			fipsApplicationStateMachine.getFIPSApplicationState());
 	}
 
 	private void _assertAllowedTransition(
