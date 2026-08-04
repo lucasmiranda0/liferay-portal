@@ -6,15 +6,48 @@
 package com.liferay.portal.security.fips.rest.resource.v1_0.test;
 
 import com.liferay.arquillian.extension.junit.bridge.junit.Arquillian;
+import com.liferay.portal.kernel.test.rule.DataGuard;
+import com.liferay.portal.kernel.util.LocaleUtil;
+import com.liferay.portal.kernel.util.PortalUtil;
+import com.liferay.portal.security.fips.rest.client.http.HttpInvoker;
+import com.liferay.portal.security.fips.rest.client.resource.v1_0.FIPSHealthVerificationResource;
 
-import org.junit.Ignore;
+import java.net.HttpURLConnection;
+
+import org.junit.Test;
 import org.junit.runner.RunWith;
 
 /**
  * @author Lucas Miranda
  */
-@Ignore
+@DataGuard(scope = DataGuard.Scope.METHOD)
 @RunWith(Arquillian.class)
 public class FIPSHealthVerificationResourceTest
 	extends BaseFIPSHealthVerificationResourceTestCase {
+
+	@Override
+	@Test
+	public void testPostFIPSHealthVerification() throws Exception {
+		HttpInvoker.HttpResponse httpResponse =
+			fipsHealthVerificationResource.
+				postFIPSHealthVerificationHttpResponse();
+
+		assertHttpResponseStatusCode(
+			HttpURLConnection.HTTP_NOT_FOUND, httpResponse);
+
+		FIPSHealthVerificationResource guestFIPSHealthVerificationResource =
+			FIPSHealthVerificationResource.builder(
+			).endpoint(
+				testCompany.getVirtualHostname(),
+				PortalUtil.getPortalServerPort(false), "http"
+			).locale(
+				LocaleUtil.getDefault()
+			).build();
+
+		assertHttpResponseStatusCode(
+			HttpURLConnection.HTTP_NOT_FOUND,
+			guestFIPSHealthVerificationResource.
+				postFIPSHealthVerificationHttpResponse());
+	}
+
 }
