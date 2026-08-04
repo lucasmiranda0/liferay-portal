@@ -10,7 +10,10 @@ import com.liferay.portal.kernel.security.fips.FIPSHealthCheckResult;
 import com.liferay.portal.kernel.security.fips.FIPSModeValidator;
 import com.liferay.portal.kernel.security.permission.PermissionChecker;
 import com.liferay.portal.kernel.security.permission.PermissionThreadLocal;
+import com.liferay.portal.kernel.test.ReflectionTestUtil;
 import com.liferay.portal.security.fips.rest.dto.v1_0.HealthVerification;
+import com.liferay.portal.security.fips.rest.internal.audit.FIPSHealthCheckAuditor;
+import com.liferay.portal.security.fips.rest.internal.error.FIPSErrorStateTrigger;
 import com.liferay.portal.test.rule.LiferayUnitTestRule;
 
 import jakarta.ws.rs.WebApplicationException;
@@ -40,6 +43,16 @@ public class HealthVerificationResourceImplTest {
 	@Before
 	public void setUp() {
 		_healthVerificationResourceImpl = new HealthVerificationResourceImpl();
+
+		_fipsHealthCheckAuditor = Mockito.mock(FIPSHealthCheckAuditor.class);
+		_fipsErrorStateTrigger = Mockito.mock(FIPSErrorStateTrigger.class);
+
+		ReflectionTestUtil.setFieldValue(
+			_healthVerificationResourceImpl, "_fipsHealthCheckAuditor",
+			_fipsHealthCheckAuditor);
+		ReflectionTestUtil.setFieldValue(
+			_healthVerificationResourceImpl, "_fipsErrorStateTrigger",
+			_fipsErrorStateTrigger);
 
 		_permissionChecker = Mockito.mock(PermissionChecker.class);
 
@@ -196,6 +209,54 @@ public class HealthVerificationResourceImplTest {
 			).status(
 				(Response.StatusType)Response.Status.SERVICE_UNAVAILABLE
 			);
+
+			// Fresh failure emits the audit event and invokes the seam
+
+			Mockito.verify(
+				_fipsHealthCheckAuditor
+			).audit(
+				Mockito.any(FIPSHealthCheckResult.class)
+			);
+
+			Mockito.verify(
+				_fipsErrorStateTrigger
+			).enterErrorState(
+				Mockito.any(FIPSHealthCheckResult.class)
+			);
+		}
+
+		// A repeat poll of an already non-operational node returns FAILED but
+		// emits no audit event and does not invoke the seam
+
+		Mockito.reset(_fipsHealthCheckAuditor, _fipsErrorStateTrigger);
+
+		try (MockedStatic<PermissionThreadLocal>
+				permissionThreadLocalMockedStatic = Mockito.mockStatic(
+					PermissionThreadLocal.class);
+			MockedStatic<FIPSModeValidator> fipsModeValidatorMockedStatic =
+				Mockito.mockStatic(FIPSModeValidator.class)) {
+
+			permissionThreadLocalMockedStatic.when(
+				PermissionThreadLocal::getPermissionChecker
+			).thenReturn(
+				_permissionChecker
+			);
+
+			fipsModeValidatorMockedStatic.when(
+				FIPSModeValidator::runSelfTests
+			).thenReturn(
+				FIPSHealthCheckResult.failed(
+					null, FIPSModeValidator.FAILED_TEST_FIPS_APPLICATION_STATE,
+					"ERROR",
+					"The FIPS application is in a non-operational state")
+			);
+
+			Assert.assertThrows(
+				WebApplicationException.class,
+				_healthVerificationResourceImpl::postHealthVerification);
+
+			Mockito.verifyNoInteractions(
+				_fipsHealthCheckAuditor, _fipsErrorStateTrigger);
 		}
 
 		try (MockedStatic<PermissionThreadLocal>
@@ -231,6 +292,8 @@ public class HealthVerificationResourceImplTest {
 		);
 	}
 
+	private FIPSErrorStateTrigger _fipsErrorStateTrigger;
+	private FIPSHealthCheckAuditor _fipsHealthCheckAuditor;
 	private HealthVerificationResourceImpl _healthVerificationResourceImpl;
 	private PermissionChecker _permissionChecker;
 	private Response.ResponseBuilder _responseBuilder;
