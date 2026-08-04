@@ -12,14 +12,18 @@ import com.liferay.portal.kernel.security.fips.FIPSModeValidator;
 import com.liferay.portal.kernel.security.permission.PermissionChecker;
 import com.liferay.portal.kernel.security.permission.PermissionThreadLocal;
 import com.liferay.portal.security.fips.rest.dto.v1_0.HealthVerification;
+import com.liferay.portal.security.fips.rest.internal.audit.FIPSHealthCheckAuditor;
+import com.liferay.portal.security.fips.rest.internal.error.FIPSErrorStateTrigger;
 import com.liferay.portal.security.fips.rest.resource.v1_0.HealthVerificationResource;
 
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
 
 import java.util.Date;
+import java.util.Objects;
 
 import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Reference;
 import org.osgi.service.component.annotations.ServiceScope;
 
 /**
@@ -82,6 +86,15 @@ public class HealthVerificationResourceImpl
 		}
 
 		if (fipsHealthCheckResult.getStatus() == FIPSHealthCheckStatus.FAILED) {
+			if (!Objects.equals(
+					fipsHealthCheckResult.getFailedTest(),
+					FIPSModeValidator.FAILED_TEST_FIPS_APPLICATION_STATE)) {
+
+				_fipsHealthCheckAuditor.audit(fipsHealthCheckResult);
+
+				_fipsErrorStateTrigger.enterErrorState(fipsHealthCheckResult);
+			}
+
 			throw new WebApplicationException(
 				Response.status(
 					Response.Status.SERVICE_UNAVAILABLE
@@ -101,5 +114,11 @@ public class HealthVerificationResourceImpl
 			Response.Status.METHOD_NOT_ALLOWED
 		).build();
 	}
+
+	@Reference
+	private FIPSErrorStateTrigger _fipsErrorStateTrigger;
+
+	@Reference
+	private FIPSHealthCheckAuditor _fipsHealthCheckAuditor;
 
 }

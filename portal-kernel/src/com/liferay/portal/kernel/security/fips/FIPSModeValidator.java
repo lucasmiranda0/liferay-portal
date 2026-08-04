@@ -42,6 +42,9 @@ import java.util.regex.Pattern;
  */
 public class FIPSModeValidator {
 
+	public static final String FAILED_TEST_FIPS_APPLICATION_STATE =
+		"fips-application-state";
+
 	public static String[] getAllowedTLSCipherSuites(String[] tlsCipherSuites) {
 		if (!PropsValues.FIPS_ENABLED) {
 			return tlsCipherSuites;
@@ -94,7 +97,8 @@ public class FIPSModeValidator {
 				(fipsApplicationState == FIPSApplicationState.POWER_OFF)) {
 
 				return FIPSHealthCheckResult.failed(
-					null, "fips-application-state", fipsApplicationState.name(),
+					null, FAILED_TEST_FIPS_APPLICATION_STATE,
+					fipsApplicationState.name(),
 					"The FIPS application is in a non-operational state");
 			}
 
