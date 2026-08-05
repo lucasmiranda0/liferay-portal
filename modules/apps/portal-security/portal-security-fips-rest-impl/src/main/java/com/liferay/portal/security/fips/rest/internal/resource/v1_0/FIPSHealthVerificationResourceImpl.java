@@ -10,6 +10,7 @@ import com.liferay.portal.kernel.security.fips.FIPSApplicationStateMachineUtil;
 import com.liferay.portal.kernel.security.fips.FIPSModeValidator;
 import com.liferay.portal.kernel.util.PropsValues;
 import com.liferay.portal.security.fips.rest.dto.v1_0.FIPSHealthVerification;
+import com.liferay.portal.security.fips.rest.internal.audit.FIPSHealthCheckAuditor;
 import com.liferay.portal.security.fips.rest.resource.v1_0.FIPSHealthVerificationResource;
 
 import jakarta.ws.rs.WebApplicationException;
@@ -18,6 +19,7 @@ import jakarta.ws.rs.core.Response;
 import java.util.Date;
 
 import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Reference;
 import org.osgi.service.component.annotations.ServiceScope;
 
 /**
@@ -52,6 +54,10 @@ public class FIPSHealthVerificationResourceImpl
 				FIPSModeValidator::validate);
 		}
 		catch (Exception exception) {
+			if (!(exception instanceof IllegalStateException)) {
+				_fipsHealthCheckAuditor.audit(exception);
+			}
+
 			fipsHealthVerification.setProviderMessage(exception::getMessage);
 		}
 
@@ -73,5 +79,8 @@ public class FIPSHealthVerificationResourceImpl
 
 		return fipsHealthVerification;
 	}
+
+	@Reference
+	private FIPSHealthCheckAuditor _fipsHealthCheckAuditor;
 
 }
