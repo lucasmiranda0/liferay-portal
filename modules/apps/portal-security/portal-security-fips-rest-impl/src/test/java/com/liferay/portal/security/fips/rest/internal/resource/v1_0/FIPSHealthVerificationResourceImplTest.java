@@ -11,6 +11,7 @@ import com.liferay.portal.kernel.security.permission.PermissionThreadLocal;
 import com.liferay.portal.kernel.test.ReflectionTestUtil;
 import com.liferay.portal.kernel.util.PropsValues;
 import com.liferay.portal.security.fips.rest.dto.v1_0.FIPSHealthVerification;
+import com.liferay.portal.security.fips.rest.internal.audit.FIPSHealthCheckAuditor;
 import com.liferay.portal.test.rule.LiferayUnitTestRule;
 
 import jakarta.ws.rs.WebApplicationException;
@@ -94,6 +95,13 @@ public class FIPSHealthVerificationResourceImplTest {
 		FIPSHealthVerificationResourceImpl fipsHealthVerificationResourceImpl =
 			new FIPSHealthVerificationResourceImpl();
 
+		FIPSHealthCheckAuditor fipsHealthCheckAuditor = Mockito.mock(
+			FIPSHealthCheckAuditor.class);
+
+		ReflectionTestUtil.setFieldValue(
+			fipsHealthVerificationResourceImpl, "_fipsHealthCheckAuditor",
+			fipsHealthCheckAuditor);
+
 		try (MockedStatic<PermissionThreadLocal>
 				permissionThreadLocalMockedStatic = Mockito.mockStatic(
 					PermissionThreadLocal.class);
@@ -159,6 +167,41 @@ public class FIPSHealthVerificationResourceImplTest {
 			Assert.assertEquals(
 				FIPSHealthVerification.Status.ERROR,
 				fipsHealthVerification.getStatus());
+
+			Mockito.verify(
+				fipsHealthCheckAuditor
+			).audit(
+				Mockito.any(Exception.class)
+			);
+		}
+
+		Mockito.reset(fipsHealthCheckAuditor);
+
+		try (MockedStatic<PermissionThreadLocal>
+				permissionThreadLocalMockedStatic = Mockito.mockStatic(
+					PermissionThreadLocal.class);
+			MockedStatic<FIPSApplicationStateMachineUtil>
+				fipsApplicationStateMachineUtilMockedStatic =
+					Mockito.mockStatic(FIPSApplicationStateMachineUtil.class)) {
+
+			permissionThreadLocalMockedStatic.when(
+				PermissionThreadLocal::getPermissionChecker
+			).thenReturn(
+				_permissionChecker
+			);
+
+			fipsApplicationStateMachineUtilMockedStatic.when(
+				() -> FIPSApplicationStateMachineUtil.selfTest(Mockito.any())
+			).thenThrow(
+				new IllegalStateException(
+					"Unable to transition the FIPS application state")
+			);
+
+			Assert.assertThrows(
+				WebApplicationException.class,
+				fipsHealthVerificationResourceImpl::postFIPSHealthVerification);
+
+			Mockito.verifyNoInteractions(fipsHealthCheckAuditor);
 		}
 	}
 
