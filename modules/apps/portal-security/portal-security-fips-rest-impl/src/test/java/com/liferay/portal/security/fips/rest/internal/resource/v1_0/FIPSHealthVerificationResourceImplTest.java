@@ -10,6 +10,7 @@ import com.liferay.portal.kernel.security.fips.FIPSApplicationStateMachineUtil;
 import com.liferay.portal.kernel.test.ReflectionTestUtil;
 import com.liferay.portal.kernel.util.PropsValues;
 import com.liferay.portal.security.fips.rest.dto.v1_0.FIPSHealthVerification;
+import com.liferay.portal.security.fips.rest.internal.audit.FIPSHealthCheckAuditor;
 import com.liferay.portal.test.rule.LiferayUnitTestRule;
 
 import jakarta.ws.rs.WebApplicationException;
@@ -85,6 +86,13 @@ public class FIPSHealthVerificationResourceImplTest {
 		FIPSHealthVerificationResourceImpl fipsHealthVerificationResourceImpl =
 			new FIPSHealthVerificationResourceImpl();
 
+		FIPSHealthCheckAuditor fipsHealthCheckAuditor = Mockito.mock(
+			FIPSHealthCheckAuditor.class);
+
+		ReflectionTestUtil.setFieldValue(
+			fipsHealthVerificationResourceImpl, "_fipsHealthCheckAuditor",
+			fipsHealthCheckAuditor);
+
 		try (MockedStatic<FIPSApplicationStateMachineUtil>
 				fipsApplicationStateMachineUtilMockedStatic =
 					Mockito.mockStatic(FIPSApplicationStateMachineUtil.class)) {
@@ -127,7 +135,13 @@ public class FIPSHealthVerificationResourceImplTest {
 				FIPSHealthVerification.Status.ERROR,
 				errorFIPSHealthVerification.getStatus());
 
-			Mockito.clearInvocations(_responseBuilder);
+			Mockito.verify(
+				fipsHealthCheckAuditor
+			).audit(
+				Mockito.any(Exception.class)
+			);
+
+			Mockito.clearInvocations(_responseBuilder, fipsHealthCheckAuditor);
 
 			fipsApplicationStateMachineUtilMockedStatic.when(
 				() -> FIPSApplicationStateMachineUtil.selfTest(Mockito.any())
@@ -167,6 +181,8 @@ public class FIPSHealthVerificationResourceImplTest {
 			Assert.assertEquals(
 				FIPSHealthVerification.Status.POWER_OFF,
 				powerOffFIPSHealthVerification.getStatus());
+
+			Mockito.verifyNoInteractions(fipsHealthCheckAuditor);
 
 			fipsApplicationStateMachineUtilMockedStatic.when(
 				() -> FIPSApplicationStateMachineUtil.selfTest(Mockito.any())
