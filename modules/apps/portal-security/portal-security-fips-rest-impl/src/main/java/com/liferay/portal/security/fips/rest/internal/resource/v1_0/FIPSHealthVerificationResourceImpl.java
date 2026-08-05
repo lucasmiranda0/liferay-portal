@@ -7,6 +7,8 @@ package com.liferay.portal.security.fips.rest.internal.resource.v1_0;
 
 import com.liferay.portal.kernel.security.fips.FIPSApplicationState;
 import com.liferay.portal.kernel.security.fips.FIPSApplicationStateMachineUtil;
+import com.liferay.portal.kernel.security.fips.FIPSAuditEvent;
+import com.liferay.portal.kernel.security.fips.FIPSAuditEventEmitterUtil;
 import com.liferay.portal.kernel.security.fips.FIPSModeValidator;
 import com.liferay.portal.kernel.util.PropsValues;
 import com.liferay.portal.security.fips.rest.dto.v1_0.FIPSHealthVerification;
@@ -52,6 +54,28 @@ public class FIPSHealthVerificationResourceImpl
 				FIPSModeValidator::validate);
 		}
 		catch (Exception exception) {
+			if (!(exception instanceof IllegalStateException)) {
+				String message = exception.getMessage();
+
+				if (message == null) {
+					message = exception.toString();
+				}
+
+				FIPSAuditEventEmitterUtil.emit(
+					new FIPSAuditEvent(
+						"periodic-health-failure",
+						FIPSAuditEvent.Severity.CRITICAL
+					).put(
+						"failed-step", "Self test"
+					).put(
+						"fips-state",
+						FIPSApplicationStateMachineUtil.getFIPSApplicationState(
+						).name()
+					).put(
+						"provider-error-message", message
+					));
+			}
+
 			fipsHealthVerification.setErrorMessage(exception::getMessage);
 		}
 
