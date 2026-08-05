@@ -5,9 +5,13 @@
 
 package com.liferay.portal.security.fips.rest.internal.resource.v1_0;
 
+import com.liferay.portal.kernel.log.Log;
+import com.liferay.portal.kernel.log.LogFactoryUtil;
 import com.liferay.portal.kernel.security.auth.PrincipalException;
 import com.liferay.portal.kernel.security.fips.FIPSApplicationState;
 import com.liferay.portal.kernel.security.fips.FIPSApplicationStateMachineUtil;
+import com.liferay.portal.kernel.security.fips.FIPSAuditEvent;
+import com.liferay.portal.kernel.security.fips.FIPSAuditUtil;
 import com.liferay.portal.kernel.security.fips.FIPSModeValidator;
 import com.liferay.portal.kernel.util.PropsValues;
 import com.liferay.portal.security.fips.rest.dto.v1_0.FIPSHealthVerification;
@@ -56,7 +60,29 @@ public class FIPSHealthVerificationResourceImpl
 				FIPSModeValidator::validate);
 		}
 		catch (Exception exception) {
-			fipsHealthVerification.setErrorMessage(exception::getMessage);
+			if (exception instanceof IllegalStateException) {
+				_log.error(
+					"Unable to complete the FIPS health verification",
+					exception);
+			}
+			else {
+				FIPSAuditEvent fipsAuditEvent = new FIPSAuditEvent(
+					"periodic-health-failure",
+					FIPSAuditEvent.Severity.CRITICAL);
+
+				fipsAuditEvent.put("failed-step", "Self test");
+				fipsAuditEvent.put(
+					"fips-state",
+					FIPSApplicationStateMachineUtil.getFIPSApplicationState(
+					).name());
+				fipsAuditEvent.put(
+					"provider-error-message", _getMessage(exception));
+
+				FIPSAuditUtil.write(fipsAuditEvent);
+			}
+
+			fipsHealthVerification.setErrorMessage(
+				() -> _getMessage(exception));
 		}
 
 		FIPSApplicationState fipsApplicationState =
@@ -77,5 +103,18 @@ public class FIPSHealthVerificationResourceImpl
 
 		return fipsHealthVerification;
 	}
+
+	private String _getMessage(Throwable throwable) {
+		String message = throwable.getMessage();
+
+		if (message == null) {
+			return throwable.toString();
+		}
+
+		return message;
+	}
+
+	private static final Log _log = LogFactoryUtil.getLog(
+		FIPSHealthVerificationResourceImpl.class);
 
 }
