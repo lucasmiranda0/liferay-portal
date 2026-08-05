@@ -7,6 +7,8 @@ package com.liferay.portal.security.fips.rest.internal.resource.v1_0;
 
 import com.liferay.portal.kernel.security.fips.FIPSApplicationState;
 import com.liferay.portal.kernel.security.fips.FIPSApplicationStateMachineUtil;
+import com.liferay.portal.kernel.security.fips.FIPSAuditEvent;
+import com.liferay.portal.kernel.security.fips.FIPSAuditEventEmitterUtil;
 import com.liferay.portal.kernel.test.ReflectionTestUtil;
 import com.liferay.portal.kernel.util.PropsValues;
 import com.liferay.portal.security.fips.rest.dto.v1_0.FIPSHealthVerification;
@@ -15,6 +17,8 @@ import com.liferay.portal.test.rule.LiferayUnitTestRule;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.RuntimeDelegate;
+
+import java.util.Map;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -87,7 +91,10 @@ public class FIPSHealthVerificationResourceImplTest {
 
 		try (MockedStatic<FIPSApplicationStateMachineUtil>
 				fipsApplicationStateMachineUtilMockedStatic =
-					Mockito.mockStatic(FIPSApplicationStateMachineUtil.class)) {
+					Mockito.mockStatic(FIPSApplicationStateMachineUtil.class);
+			MockedStatic<FIPSAuditEventEmitterUtil>
+				fipsAuditEventEmitterUtilMockedStatic = Mockito.mockStatic(
+					FIPSAuditEventEmitterUtil.class)) {
 
 			fipsApplicationStateMachineUtilMockedStatic.when(
 				() -> FIPSApplicationStateMachineUtil.selfTest(Mockito.any())
@@ -127,7 +134,32 @@ public class FIPSHealthVerificationResourceImplTest {
 				FIPSHealthVerification.Status.ERROR,
 				errorFIPSHealthVerification.getStatus());
 
+			ArgumentCaptor<FIPSAuditEvent> fipsAuditEventArgumentCaptor =
+				ArgumentCaptor.forClass(FIPSAuditEvent.class);
+
+			fipsAuditEventEmitterUtilMockedStatic.verify(
+				() -> FIPSAuditEventEmitterUtil.emit(
+					fipsAuditEventArgumentCaptor.capture()));
+
+			FIPSAuditEvent fipsAuditEvent =
+				fipsAuditEventArgumentCaptor.getValue();
+
+			Assert.assertEquals(
+				"periodic-health-failure", fipsAuditEvent.getEventType());
+			Assert.assertEquals(
+				FIPSAuditEvent.Severity.CRITICAL, fipsAuditEvent.getSeverity());
+
+			Map<String, Object> fields = fipsAuditEvent.getFields();
+
+			Assert.assertEquals("Self test", fields.get("failed-step"));
+			Assert.assertEquals("ERROR", fields.get("fips-state"));
+			Assert.assertEquals(
+				"java.lang.SecurityException",
+				fields.get("provider-error-message"));
+
 			Mockito.clearInvocations(_responseBuilder);
+
+			fipsAuditEventEmitterUtilMockedStatic.clearInvocations();
 
 			fipsApplicationStateMachineUtilMockedStatic.when(
 				() -> FIPSApplicationStateMachineUtil.selfTest(Mockito.any())
@@ -167,6 +199,8 @@ public class FIPSHealthVerificationResourceImplTest {
 			Assert.assertEquals(
 				FIPSHealthVerification.Status.POWER_OFF,
 				powerOffFIPSHealthVerification.getStatus());
+
+			fipsAuditEventEmitterUtilMockedStatic.verifyNoInteractions();
 
 			fipsApplicationStateMachineUtilMockedStatic.when(
 				() -> FIPSApplicationStateMachineUtil.selfTest(Mockito.any())
