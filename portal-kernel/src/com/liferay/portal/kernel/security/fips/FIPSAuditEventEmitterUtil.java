@@ -30,14 +30,21 @@ import java.nio.file.attribute.PosixFilePermissions;
 import java.security.Provider;
 import java.security.Security;
 
+import java.time.DateTimeException;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.TemporalAccessor;
 
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
@@ -67,9 +74,11 @@ public class FIPSAuditEventEmitterUtil {
 			).put(
 				"event-schema-version", "1.0"
 			).put(
+				"event-sequence", _eventSequence.incrementAndGet()
+			).put(
 				"event-type", fipsAuditEvent.getEventType()
 			).put(
-				"fields", fipsAuditEvent.getFields()
+				"fields", _normalizeTimestamps(fipsAuditEvent.getFields())
 			).put(
 				"provider-name",
 				() -> {
@@ -95,13 +104,7 @@ public class FIPSAuditEventEmitterUtil {
 			).put(
 				"severity", severity.getValue()
 			).put(
-				"timestamp",
-				() -> {
-					Instant instant = Instant.now();
-
-					return _dateTimeFormatter.format(
-						instant.atZone(ZoneOffset.UTC));
-				}
+				"timestamp", () -> _formatTimestamp(Instant.now())
 			).build(),
 			severity);
 	}
@@ -138,6 +141,10 @@ public class FIPSAuditEventEmitterUtil {
 		}
 
 		return null;
+	}
+
+	private static String _formatTimestamp(Instant instant) {
+		return _dateTimeFormatter.format(instant.atZone(ZoneOffset.UTC));
 	}
 
 	private static String _getDeploymentInstanceId() {
@@ -183,6 +190,46 @@ public class FIPSAuditEventEmitterUtil {
 		return Level.INFO;
 	}
 
+	private static Object _normalizeTimestamp(Object value) {
+		if (value instanceof Date) {
+			Date date = (Date)value;
+
+			return _formatTimestamp(date.toInstant());
+		}
+
+		if (value instanceof Iterable) {
+			List<Object> normalizedValues = new ArrayList<>();
+
+			for (Object curValue : (Iterable<?>)value) {
+				normalizedValues.add(_normalizeTimestamp(curValue));
+			}
+
+			return normalizedValues;
+		}
+
+		if (value instanceof Map) {
+			return _normalizeTimestamps((Map<?, ?>)value);
+		}
+
+		if (value instanceof TemporalAccessor) {
+			return _formatTimestamp(_toInstant((TemporalAccessor)value));
+		}
+
+		return value;
+	}
+
+	private static Map<String, Object> _normalizeTimestamps(Map<?, ?> map) {
+		Map<String, Object> normalizedMap = new LinkedHashMap<>();
+
+		for (Map.Entry<?, ?> entry : map.entrySet()) {
+			normalizedMap.put(
+				String.valueOf(entry.getKey()),
+				_normalizeTimestamp(entry.getValue()));
+		}
+
+		return normalizedMap;
+	}
+
 	private static void _sync() {
 		RollingFileAppender rollingFileAppender = _fetchRollingFileAppender();
 
@@ -206,6 +253,19 @@ public class FIPSAuditEventEmitterUtil {
 		catch (IOException ioException) {
 			throw new UncheckedIOException(
 				"Unable to flush the FIPS audit log", ioException);
+		}
+	}
+
+	private static Instant _toInstant(TemporalAccessor temporalAccessor) {
+		try {
+			return Instant.from(temporalAccessor);
+		}
+		catch (DateTimeException dateTimeException) {
+			throw new IllegalArgumentException(
+				StringBundler.concat(
+					"Unable to normalize the FIPS audit timestamp \"",
+					temporalAccessor, "\" because it carries no time zone"),
+				dateTimeException);
 		}
 	}
 
@@ -323,6 +383,7 @@ public class FIPSAuditEventEmitterUtil {
 
 	private static final DateTimeFormatter _dateTimeFormatter =
 		DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
+	private static final AtomicLong _eventSequence = new AtomicLong();
 	private static final AtomicBoolean _filePermissionsChecked =
 		new AtomicBoolean();
 
