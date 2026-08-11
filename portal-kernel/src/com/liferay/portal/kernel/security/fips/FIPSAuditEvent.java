@@ -5,6 +5,11 @@
 
 package com.liferay.portal.kernel.security.fips;
 
+import com.liferay.petra.string.StringBundler;
+
+import java.security.Key;
+import java.security.spec.KeySpec;
+
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -32,6 +37,14 @@ public class FIPSAuditEvent {
 	}
 
 	public FIPSAuditEvent put(String key, Object value) {
+		if (_isSensitiveSecurityParameter(value)) {
+			throw new IllegalArgumentException(
+				StringBundler.concat(
+					"Unable to record the FIPS audit field \"", key,
+					"\" because a sensitive security parameter must never ",
+					"reach an audit record"));
+		}
+
 		_fields.put(key, value);
 
 		return this;
@@ -51,6 +64,16 @@ public class FIPSAuditEvent {
 
 		private final String _value;
 
+	}
+
+	private boolean _isSensitiveSecurityParameter(Object value) {
+		if (value instanceof byte[] || value instanceof char[] ||
+			value instanceof Key || value instanceof KeySpec) {
+
+			return true;
+		}
+
+		return false;
 	}
 
 	private final String _eventType;
