@@ -9,6 +9,7 @@ import com.liferay.petra.lang.SafeCloseable;
 import com.liferay.portal.kernel.test.ReflectionTestUtil;
 import com.liferay.portal.kernel.test.util.PropsValuesTestUtil;
 import com.liferay.portal.kernel.test.util.RandomTestUtil;
+import com.liferay.portal.kernel.util.PropsUtil;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -16,11 +17,20 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.message.Message;
+import org.apache.logging.log4j.message.ObjectMessage;
+
 import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
+import org.mockito.ArgumentCaptor;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
@@ -30,21 +40,46 @@ import org.mockito.Mockito;
  */
 public class FIPSApplicationStateMachineUtilTest {
 
+	@BeforeClass
+	public static void setUpClass() {
+		PropsUtil.get("fips.enabled");
+
+		_logger = Mockito.mock(Logger.class);
+
+		_logManagerMockedStatic = Mockito.mockStatic(
+			LogManager.class, Mockito.CALLS_REAL_METHODS);
+
+		_logManagerMockedStatic.when(
+			() -> LogManager.getLogger(FIPSAuditEventEmitterUtil.class)
+		).thenReturn(
+			_logger
+		);
+	}
+
+	@AfterClass
+	public static void tearDownClass() {
+		_logManagerMockedStatic.close();
+	}
+
 	@Before
 	public void setUp() {
+		Mockito.reset(_logger);
+
 		_safeCloseable = PropsValuesTestUtil.swapWithSafeCloseable(
 			"FIPS_AUDIT_DEPLOYMENT_INSTANCE_ID", RandomTestUtil.randomString());
 
-		_fipsAuditUtilMockedStatic = Mockito.mockStatic(FIPSAuditUtil.class);
-
-		_fipsAuditUtilMockedStatic.when(
-			() -> FIPSAuditUtil.write(Mockito.any(), Mockito.any())
-		).thenAnswer(
+		Mockito.doAnswer(
 			invocation -> {
-				_records.add(invocation.getArgument(1));
+				ObjectMessage objectMessage = invocation.getArgument(1);
+
+				_records.add((Map<String, Object>)objectMessage.getParameter());
 
 				return null;
 			}
+		).when(
+			_logger
+		).log(
+			Mockito.any(Level.class), Mockito.any(Message.class)
 		);
 
 		_setFIPSApplicationState(FIPSApplicationState.INITIALIZING);
@@ -52,8 +87,6 @@ public class FIPSApplicationStateMachineUtilTest {
 
 	@After
 	public void tearDown() {
-		_fipsAuditUtilMockedStatic.close();
-
 		_safeCloseable.close();
 	}
 
@@ -141,6 +174,30 @@ public class FIPSApplicationStateMachineUtilTest {
 	}
 
 	@Test
+	public void testOperational() {
+		_setFIPSApplicationState(FIPSApplicationState.QUIESCENT);
+
+		String cryptoOfficerUserId = RandomTestUtil.randomString();
+		String reason = RandomTestUtil.randomString();
+
+		FIPSApplicationStateMachineUtil.operational(
+			cryptoOfficerUserId, reason);
+
+		Assert.assertEquals(
+			FIPSApplicationState.OPERATIONAL,
+			FIPSApplicationStateMachineUtil.getFIPSApplicationState());
+
+		Map<String, Object> record = _getRecord();
+
+		_assertEnvelope(record, "severity", "info");
+
+		_assertField(record, "crypto-officer-user-id", cryptoOfficerUserId);
+		_assertField(record, "from-state", "Quiescent");
+		_assertField(record, "reason", reason);
+		_assertField(record, "to-state", "Operational");
+	}
+
+	@Test
 	public void testPowerOff() {
 		_setFIPSApplicationState(FIPSApplicationState.OPERATIONAL);
 
@@ -174,23 +231,50 @@ public class FIPSApplicationStateMachineUtilTest {
 			FIPSApplicationState.QUIESCENT,
 			FIPSApplicationStateMachineUtil.getFIPSApplicationState());
 
-		FIPSApplicationStateMachineUtil.operational(
-			cryptoOfficerUserId, reason);
+		Map<String, Object> record = _getRecord();
+
+		_assertEnvelope(record, "severity", "info");
+
+		_assertField(record, "crypto-officer-user-id", cryptoOfficerUserId);
+		_assertField(record, "from-state", "Operational");
+		_assertField(record, "reason", reason);
+		_assertField(record, "to-state", "Quiescent");
+	}
+
+	@Test
+	public void testRegisterShutdownHook() {
+		_setFIPSApplicationState(FIPSApplicationState.OPERATIONAL);
+
+		Thread thread = _registerShutdownHook();
+
+		thread.run();
 
 		Assert.assertEquals(
-			FIPSApplicationState.OPERATIONAL,
+			FIPSApplicationState.POWER_OFF,
 			FIPSApplicationStateMachineUtil.getFIPSApplicationState());
 
-		Assert.assertEquals(_records.toString(), 2, _records.size());
+		Map<String, Object> record = _getRecord();
 
-		_assertField(
-			_records.get(0), "crypto-officer-user-id", cryptoOfficerUserId);
-		_assertField(_records.get(0), "reason", reason);
-		_assertField(_records.get(0), "to-state", "Quiescent");
+		_assertEnvelope(record, "severity", "info");
 
-		_assertField(_records.get(1), "from-state", "Quiescent");
-		_assertField(_records.get(1), "reason", reason);
-		_assertField(_records.get(1), "to-state", "Operational");
+		_assertField(record, "from-state", "Operational");
+		_assertField(record, "initiating-actor", "OS signal");
+		_assertField(record, "to-state", "Power-off");
+	}
+
+	@Test
+	public void testRegisterShutdownHookWithPowerOffState() {
+		_setFIPSApplicationState(FIPSApplicationState.POWER_OFF);
+
+		Thread thread = _registerShutdownHook();
+
+		thread.run();
+
+		Assert.assertEquals(
+			FIPSApplicationState.POWER_OFF,
+			FIPSApplicationStateMachineUtil.getFIPSApplicationState());
+
+		Assert.assertTrue(_records.toString(), _records.isEmpty());
 	}
 
 	@Test
@@ -378,6 +462,33 @@ public class FIPSApplicationStateMachineUtilTest {
 		return _records.get(_records.size() - 1);
 	}
 
+	private Thread _registerShutdownHook() {
+		try (MockedStatic<Runtime> runtimeMockedStatic = Mockito.mockStatic(
+				Runtime.class)) {
+
+			Runtime runtime = Mockito.mock(Runtime.class);
+
+			runtimeMockedStatic.when(
+				Runtime::getRuntime
+			).thenReturn(
+				runtime
+			);
+
+			FIPSApplicationStateMachineUtil.registerShutdownHook();
+
+			ArgumentCaptor<Thread> argumentCaptor = ArgumentCaptor.forClass(
+				Thread.class);
+
+			Mockito.verify(
+				runtime
+			).addShutdownHook(
+				argumentCaptor.capture()
+			);
+
+			return argumentCaptor.getValue();
+		}
+	}
+
 	private void _setFIPSApplicationState(
 		FIPSApplicationState fipsApplicationState) {
 
@@ -467,7 +578,10 @@ public class FIPSApplicationStateMachineUtilTest {
 			});
 	}
 
-	private MockedStatic<FIPSAuditUtil> _fipsAuditUtilMockedStatic;
+	private static Logger _logger;
+
+	private static MockedStatic<LogManager> _logManagerMockedStatic;
+
 	private final List<Map<String, Object>> _records = new ArrayList<>();
 	private SafeCloseable _safeCloseable;
 

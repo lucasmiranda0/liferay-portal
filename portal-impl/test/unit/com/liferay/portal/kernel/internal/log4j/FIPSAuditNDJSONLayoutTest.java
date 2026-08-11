@@ -7,6 +7,7 @@ package com.liferay.portal.kernel.internal.log4j;
 
 import com.liferay.portal.kernel.test.rule.AggregateTestRule;
 import com.liferay.portal.kernel.test.rule.CodeCoverageAssertor;
+import com.liferay.portal.kernel.test.util.RandomTestUtil;
 import com.liferay.portal.kernel.util.LinkedHashMapBuilder;
 import com.liferay.portal.test.rule.LiferayUnitTestRule;
 
@@ -51,7 +52,8 @@ public class FIPSAuditNDJSONLayoutTest {
 			"event-type", "fips-state-transition"
 		).build();
 
-		FIPSAuditNDJSONLayout fipsAuditNDJSONLayout = _newLayout();
+		FIPSAuditNDJSONLayout fipsAuditNDJSONLayout =
+			_newFIPSAuditNDJSONLayout();
 
 		TestByteBufferDestination testByteBufferDestination =
 			new TestByteBufferDestination();
@@ -65,7 +67,8 @@ public class FIPSAuditNDJSONLayoutTest {
 
 	@Test
 	public void testGetContentType() {
-		FIPSAuditNDJSONLayout fipsAuditNDJSONLayout = _newLayout();
+		FIPSAuditNDJSONLayout fipsAuditNDJSONLayout =
+			_newFIPSAuditNDJSONLayout();
 
 		Assert.assertEquals(
 			"application/x-ndjson; charset=UTF-8",
@@ -119,7 +122,7 @@ public class FIPSAuditNDJSONLayoutTest {
 	public void testToSerializableSortsKeysRecursively() {
 		Assert.assertEquals(
 			"{\"event-type\":\"fips-state-transition\",\"fields\":" +
-				"{\"from-state\":\"SELF_TEST\",\"to-state\":\"OPERATIONAL\"}," +
+				"{\"from-state\":\"Self-Test\",\"to-state\":\"Operational\"}," +
 					"\"severity\":\"info\"}\n",
 			_toSerializable(
 				LinkedHashMapBuilder.<String, Object>put(
@@ -127,9 +130,9 @@ public class FIPSAuditNDJSONLayoutTest {
 				).put(
 					"fields",
 					LinkedHashMapBuilder.<String, Object>put(
-						"to-state", "OPERATIONAL"
+						"to-state", "Operational"
 					).put(
-						"from-state", "SELF_TEST"
+						"from-state", "Self-Test"
 					).build()
 				).put(
 					"event-type", "fips-state-transition"
@@ -138,7 +141,8 @@ public class FIPSAuditNDJSONLayoutTest {
 
 	@Test
 	public void testToSerializableWritesMessageKeyForUnreadableMessages() {
-		FIPSAuditNDJSONLayout fipsAuditNDJSONLayout = _newLayout();
+		FIPSAuditNDJSONLayout fipsAuditNDJSONLayout =
+			_newFIPSAuditNDJSONLayout();
 
 		Assert.assertEquals(
 			"{\"message\":\"Unable to \\\"parse\\\" the record\"}\n",
@@ -193,7 +197,7 @@ public class FIPSAuditNDJSONLayoutTest {
 				).build()));
 	}
 
-	private FIPSAuditNDJSONLayout _newLayout() {
+	private FIPSAuditNDJSONLayout _newFIPSAuditNDJSONLayout() {
 		FIPSAuditNDJSONLayout.Builder builder =
 			FIPSAuditNDJSONLayout.newBuilder();
 
@@ -204,14 +208,15 @@ public class FIPSAuditNDJSONLayoutTest {
 		Log4jLogEvent.Builder builder = Log4jLogEvent.newBuilder();
 
 		builder.setLevel(Level.INFO);
-		builder.setLoggerName("liferay.fips.audit");
+		builder.setLoggerName(RandomTestUtil.randomString());
 		builder.setMessage(message);
 
 		return builder.build();
 	}
 
 	private String _toSerializable(Map<String, Object> record) {
-		FIPSAuditNDJSONLayout fipsAuditNDJSONLayout = _newLayout();
+		FIPSAuditNDJSONLayout fipsAuditNDJSONLayout =
+			_newFIPSAuditNDJSONLayout();
 
 		return fipsAuditNDJSONLayout.toSerializable(
 			_newLogEvent(new ObjectMessage(record)));
