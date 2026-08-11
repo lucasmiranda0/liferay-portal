@@ -5,18 +5,27 @@
 
 package com.liferay.portal.kernel.security.fips;
 
+import com.liferay.petra.string.StringBundler;
+import com.liferay.portal.kernel.internal.log4j.FIPSAuditNDJSONLayout;
+import com.liferay.portal.kernel.log.Log;
+import com.liferay.portal.kernel.log.LogFactoryUtil;
 import com.liferay.portal.kernel.util.ArrayUtil;
 import com.liferay.portal.kernel.util.LinkedHashMapBuilder;
 import com.liferay.portal.kernel.util.PropsValues;
+import com.liferay.portal.kernel.util.ServerDetector;
 import com.liferay.portal.kernel.util.Validator;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
 
+import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
 
 import java.security.Provider;
 import java.security.Security;
@@ -25,58 +34,31 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.core.Appender;
+import org.apache.logging.log4j.core.LoggerContext;
+import org.apache.logging.log4j.core.appender.RollingFileAppender;
+import org.apache.logging.log4j.core.appender.rolling.RollingFileManager;
+import org.apache.logging.log4j.core.config.Configuration;
+import org.apache.logging.log4j.message.ObjectMessage;
 
 /**
- * Process wide entry point for emitting FIPS audit events, and the authority on
- * what a record contains: the common envelope, carrying the CMVP certificate ID
- * and deployment instance ID, the event schema version, the event type, the
- * validated provider name and version active at emission, the severity, and the
- * §5.1 timestamp. The finished record goes to {@link FIPSAuditUtil}, which owns
- * rendering and storage.
- *
- * <p>
- * Event specific fields are nested under a single {@code fields} object rather
- * than merged into the envelope, so an event can never overwrite an envelope key
- * and misattribute the record.
- * </p>
- *
- * <p>
- * Every record carries the §5.1 timestamp in one canonical representation: UTC,
- * ISO 8601 extended form with millisecond precision and a literal
- * <code>Z</code> suffix (for example <code>2026-05-06T14:19:23.471Z</code>),
- * read from the host clock and emitted in UTC regardless of the host default
- * time zone. Sub millisecond precision is truncated rather than rounded. The
- * timestamp alone does not order two events emitted within the same millisecond,
- * so the §5.4 audit log integrity chain, not the timestamp, is the authority on
- * order.
- * </p>
- *
- * <p>
- * The FIPS application state machine drives events during boot, before the OSGi
- * runtime exists, so the envelope sources are read without any framework
- * dependency: the CMVP certificate ID and deployment instance ID come from the
- * <code>fips.audit.provider.cmvp.certificate.id</code> and
- * <code>fips.audit.deployment.instance.id</code> properties, and the provider
- * name and version from the validated JCE provider.
- * </p>
- *
- * <p>
- * Emission does not lock, because nothing it touches is both shared and mutable:
- * the timestamp formatter is immutable, {@link Security#getProviders} hands back
- * a copy, and the deployment instance ID either comes from a property or from a
- * file created on the first emission, while the portal is still single threaded.
- * The appender serializes the write itself.
- * </p>
- *
  * @author Jorge García Jiménez
  * @author Rafael Praxedes
  */
 public class FIPSAuditEventEmitterUtil {
 
 	public static void emit(FIPSAuditEvent fipsAuditEvent) {
-		FIPSAuditUtil.write(
-			fipsAuditEvent.getFIPSAuditSeverity(),
+		FIPSAuditEvent.Severity severity = fipsAuditEvent.getSeverity();
+
+		_write(
 			LinkedHashMapBuilder.<String, Object>put(
 				"cmvp-certificate-id",
 				PropsValues.FIPS_AUDIT_PROVIDER_CMVP_CERTIFICATE_ID
@@ -111,13 +93,7 @@ public class FIPSAuditEventEmitterUtil {
 					return provider.getVersionStr();
 				}
 			).put(
-				"severity",
-				() -> {
-					FIPSAuditSeverity fipsAuditSeverity =
-						fipsAuditEvent.getFIPSAuditSeverity();
-
-					return fipsAuditSeverity.getValue();
-				}
+				"severity", severity.getValue()
 			).put(
 				"timestamp",
 				() -> {
@@ -126,7 +102,17 @@ public class FIPSAuditEventEmitterUtil {
 					return _dateTimeFormatter.format(
 						instant.atZone(ZoneOffset.UTC));
 				}
-			).build());
+			).build(),
+			severity);
+	}
+
+	private static String _fetchFileName(
+		RollingFileAppender rollingFileAppender) {
+
+		RollingFileManager rollingFileManager =
+			rollingFileAppender.getManager();
+
+		return rollingFileManager.getFileName();
 	}
 
 	private static Provider _fetchProvider() {
@@ -137,6 +123,21 @@ public class FIPSAuditEventEmitterUtil {
 		}
 
 		return providers[0];
+	}
+
+	private static RollingFileAppender _fetchRollingFileAppender() {
+		LoggerContext loggerContext = (LoggerContext)LogManager.getContext(
+			false);
+
+		Configuration configuration = loggerContext.getConfiguration();
+
+		Appender appender = configuration.getAppender(_APPENDER_NAME);
+
+		if (appender instanceof RollingFileAppender) {
+			return (RollingFileAppender)appender;
+		}
+
+		return null;
 	}
 
 	private static String _getDeploymentInstanceId() {
@@ -174,7 +175,155 @@ public class FIPSAuditEventEmitterUtil {
 		}
 	}
 
+	private static Level _getLevel(FIPSAuditEvent.Severity severity) {
+		if (severity == FIPSAuditEvent.Severity.CRITICAL) {
+			return Level.ERROR;
+		}
+
+		return Level.INFO;
+	}
+
+	private static void _sync() {
+		RollingFileAppender rollingFileAppender = _fetchRollingFileAppender();
+
+		if (rollingFileAppender == null) {
+			return;
+		}
+
+		String fileName = _fetchFileName(rollingFileAppender);
+
+		if (fileName == null) {
+			return;
+		}
+
+		Path path = Paths.get(fileName);
+
+		try (FileChannel fileChannel = FileChannel.open(
+				path, StandardOpenOption.WRITE)) {
+
+			fileChannel.force(true);
+		}
+		catch (IOException ioException) {
+			throw new UncheckedIOException(
+				"Unable to flush the FIPS audit log", ioException);
+		}
+	}
+
+	private static void _validateDeliverable(Level level) {
+		if (!PropsValues.FIPS_ENABLED ||
+			(ServerDetector.getServerId() == null)) {
+
+			return;
+		}
+
+		if (!_logger.isEnabled(level)) {
+			throw new IllegalStateException(
+				StringBundler.concat(
+					"Unable to write a FIPS audit record because the logger \"",
+					FIPSAuditEventEmitterUtil.class.getName(),
+					"\" is disabled for the level \"", level,
+					"\". Check that the portal property ",
+					"\"log4j.configure.on.startup\" is enabled and that no ",
+					"configuration lowers the level of that logger"));
+		}
+
+		RollingFileAppender rollingFileAppender = _fetchRollingFileAppender();
+
+		if (rollingFileAppender == null) {
+			throw new IllegalStateException(
+				StringBundler.concat(
+					"Unable to write a FIPS audit record because the appender ",
+					"\"", _APPENDER_NAME, "\" is not configured"));
+		}
+
+		if (!(rollingFileAppender.getLayout() instanceof
+				FIPSAuditNDJSONLayout)) {
+
+			throw new IllegalStateException(
+				StringBundler.concat(
+					"Unable to write a FIPS audit record because the appender ",
+					"\"", _APPENDER_NAME, "\" does not render it with \"",
+					FIPSAuditNDJSONLayout.PLUGIN_NAME, "\""));
+		}
+
+		_warnUnprotectedAuditLog(rollingFileAppender);
+	}
+
+	private static void _warnUnprotectedAuditLog(
+		RollingFileAppender rollingFileAppender) {
+
+		if (!_filePermissionsChecked.compareAndSet(false, true)) {
+			return;
+		}
+
+		RollingFileManager rollingFileManager =
+			rollingFileAppender.getManager();
+
+		Set<PosixFilePermission> posixFilePermissions =
+			rollingFileManager.getFilePermissions();
+
+		String fileName = _fetchFileName(rollingFileAppender);
+
+		if ((posixFilePermissions == null) || (fileName == null)) {
+			return;
+		}
+
+		try {
+			Set<PosixFilePermission> currentPosixFilePermissions =
+				Files.getPosixFilePermissions(Paths.get(fileName));
+
+			if (posixFilePermissions.equals(currentPosixFilePermissions) ||
+				!_log.isWarnEnabled()) {
+
+				return;
+			}
+
+			_log.warn(
+				StringBundler.concat(
+					"The FIPS audit log ", fileName, " has the permissions ",
+					PosixFilePermissions.toString(currentPosixFilePermissions),
+					" instead of the configured ",
+					PosixFilePermissions.toString(posixFilePermissions),
+					", so it is not protected against unauthorized reading"));
+		}
+		catch (Exception exception) {
+			if (_log.isWarnEnabled()) {
+				_log.warn(
+					StringBundler.concat(
+						"Unable to verify the permissions of the FIPS audit ",
+						"log ", fileName,
+						", so it is not known to be protected against ",
+						"unauthorized reading"),
+					exception);
+			}
+		}
+	}
+
+	private static void _write(
+		Map<String, Object> record, FIPSAuditEvent.Severity severity) {
+
+		Level level = _getLevel(severity);
+
+		_validateDeliverable(level);
+
+		_logger.log(level, new ObjectMessage(record));
+
+		if (severity == FIPSAuditEvent.Severity.CRITICAL) {
+			_sync();
+		}
+	}
+
+	private static final String _APPENDER_NAME = "FIPS_AUDIT_FILE";
+
+	private static final Log _log = LogFactoryUtil.getLog(
+		FIPSAuditEventEmitterUtil.class);
+
+	private static final Logger _logger = LogManager.getLogger(
+		FIPSAuditEventEmitterUtil.class);
+
 	private static final DateTimeFormatter _dateTimeFormatter =
 		DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
+	private static final AtomicBoolean _filePermissionsChecked =
+		new AtomicBoolean();
 
 }

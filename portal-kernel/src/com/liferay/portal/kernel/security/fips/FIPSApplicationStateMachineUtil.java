@@ -6,6 +6,8 @@
 package com.liferay.portal.kernel.security.fips;
 
 import com.liferay.petra.string.StringBundler;
+import com.liferay.portal.kernel.log.Log;
+import com.liferay.portal.kernel.log.LogFactoryUtil;
 
 import java.util.Map;
 import java.util.Set;
@@ -13,26 +15,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 /**
- * The §2.2 finite state model of the portal as a FIPS application, and the only
- * writer of the <code>fips-state-transition</code> audit trail. Each transition
- * is recorded where it happens, carrying the detail §5.2 asks of that
- * transition, so a state the model gains can never go unrecorded.
- *
- * <p>
- * The record is written after the state has already changed, and a write that
- * fails leaves it changed. Writing first would trade a lost record for a
- * phantom one, since the swap can still be refused once a record claiming it
- * has reached the trail, and a trail that attests to a transition that never
- * happened is worse than one that misses a transition that did. Rolling the
- * state back is not available either: the model has no return edge, the earlier
- * value has stopped being true of the portal, and a terminal power-off has
- * nothing to return to. ISO/IEC 19790 7.6.3.2 [AS06.29] asks the module to
- * provide its events to an audit mechanism and puts no obligation on it to undo
- * an event it could not record, so the failure is surfaced instead of repaired:
- * the exception leaves the machine and fails the transition closed at its
- * caller.
- * </p>
- *
  * @author Jorge García Jiménez
  */
 public class FIPSApplicationStateMachineUtil {
@@ -62,7 +44,7 @@ public class FIPSApplicationStateMachineUtil {
 				fipsAuditEvent.put("operation-type", operationType);
 			});
 
-		_run(
+		_runAndTransitionToOperational(
 			"Key or CSP entry", "The operation was completed successfully",
 			runnable);
 	}
@@ -94,19 +76,6 @@ public class FIPSApplicationStateMachineUtil {
 			});
 	}
 
-	/**
-	 * Records the terminal power-off transition on a best-effort basis.
-	 *
-	 * <p>
-	 * A JVM shutdown hook runs after the servlet context is destroyed, and the
-	 * context shuts Log4J down on its way out, so on an orderly stop the
-	 * <code>FIPS_AUDIT_FILE</code> appender is already gone by the time this
-	 * hook fires and the record is lost. §5.2 accepts that: a reliable
-	 * emit-and-flush during JVM termination is a known limitation. Anything
-	 * needing the record for certain has to power off before Log4J does, which
-	 * the guard below already allows for.
-	 * </p>
-	 */
 	public static void registerShutdownHook() {
 		Runtime runtime = Runtime.getRuntime();
 
@@ -119,7 +88,14 @@ public class FIPSApplicationStateMachineUtil {
 						return;
 					}
 
-					powerOff("OS signal");
+					try {
+						powerOff("OS signal");
+					}
+					catch (Throwable throwable) {
+						if (_log.isDebugEnabled()) {
+							_log.debug(throwable);
+						}
+					}
 				}));
 	}
 
@@ -146,16 +122,6 @@ public class FIPSApplicationStateMachineUtil {
 		_runSelfTest(runnable);
 	}
 
-	private static FIPSAuditSeverity _getFIPSAuditSeverity(
-		FIPSApplicationState fipsApplicationState) {
-
-		if (fipsApplicationState == FIPSApplicationState.ERROR) {
-			return FIPSAuditSeverity.CRITICAL;
-		}
-
-		return FIPSAuditSeverity.INFO;
-	}
-
 	private static String _getMessage(Throwable throwable) {
 		String message = throwable.getMessage();
 
@@ -166,7 +132,17 @@ public class FIPSApplicationStateMachineUtil {
 		return message;
 	}
 
-	private static void _run(
+	private static FIPSAuditEvent.Severity _getSeverity(
+		FIPSApplicationState fipsApplicationState) {
+
+		if (fipsApplicationState == FIPSApplicationState.ERROR) {
+			return FIPSAuditEvent.Severity.CRITICAL;
+		}
+
+		return FIPSAuditEvent.Severity.INFO;
+	}
+
+	private static void _runAndTransitionToOperational(
 		String failedStep, String message, Runnable runnable) {
 
 		try {
@@ -184,7 +160,7 @@ public class FIPSApplicationStateMachineUtil {
 	}
 
 	private static void _runSelfTest(Runnable runnable) {
-		_run(
+		_runAndTransitionToOperational(
 			"Self test",
 			"All checks and the validated provider self tests passed",
 			runnable);
@@ -215,8 +191,7 @@ public class FIPSApplicationStateMachineUtil {
 				});
 
 		FIPSAuditEvent fipsAuditEvent = new FIPSAuditEvent(
-			"fips-state-transition",
-			_getFIPSAuditSeverity(fipsApplicationState));
+			"fips-state-transition", _getSeverity(fipsApplicationState));
 
 		fipsAuditEvent.put(
 			"from-state", previousFIPSApplicationState.getValue());
@@ -226,6 +201,9 @@ public class FIPSApplicationStateMachineUtil {
 
 		FIPSAuditEventEmitterUtil.emit(fipsAuditEvent);
 	}
+
+	private static final Log _log = LogFactoryUtil.getLog(
+		FIPSApplicationStateMachineUtil.class);
 
 	private static final Map<FIPSApplicationState, Set<FIPSApplicationState>>
 		_allowedTransitions = Map.of(
