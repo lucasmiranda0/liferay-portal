@@ -24,8 +24,13 @@ import java.security.Provider;
 import java.security.Security;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.TimeZone;
@@ -258,6 +263,87 @@ public class FIPSAuditEventEmitterUtilTest {
 	}
 
 	@Test
+	public void testEmitNormalizesFieldTimestamps() {
+		_testEmitNormalizesFieldTimestamp(
+			"2025-05-06T14:19:23.471Z",
+			Date.from(Instant.parse("2025-05-06T14:19:23.471Z")));
+		_testEmitNormalizesFieldTimestamp(
+			"2026-05-06T14:19:23.000Z", Instant.parse("2026-05-06T14:19:23Z"));
+		_testEmitNormalizesFieldTimestamp(
+			"2026-05-06T14:19:23.471Z",
+			Instant.parse("2026-05-06T14:19:23.471999999Z"));
+		_testEmitNormalizesFieldTimestamp(
+			"2026-05-06T14:19:23.471Z",
+			OffsetDateTime.parse("2026-05-06T16:19:23.471+02:00"));
+	}
+
+	@Test
+	public void testEmitNormalizesNestedFieldTimestamps() {
+		FIPSAuditEvent fipsAuditEvent = new FIPSAuditEvent(
+			RandomTestUtil.randomString(), FIPSAuditEvent.Severity.INFO);
+
+		fipsAuditEvent.put(
+			"provider-self-test",
+			Collections.singletonMap(
+				"completed", Instant.parse("2026-05-06T14:19:23.471Z")));
+		fipsAuditEvent.put(
+			"provider-timestamps",
+			Arrays.asList(Instant.parse("2026-05-06T14:19:23Z")));
+
+		FIPSAuditEventEmitterUtil.emit(fipsAuditEvent);
+
+		Map<String, Object> record = _getRecord(Level.INFO);
+
+		Map<?, ?> fields = (Map<?, ?>)record.get("fields");
+
+		Map<?, ?> providerSelfTestMap = (Map<?, ?>)fields.get(
+			"provider-self-test");
+
+		Assert.assertEquals(
+			"2026-05-06T14:19:23.471Z", providerSelfTestMap.get("completed"));
+
+		Assert.assertEquals(
+			Arrays.asList("2026-05-06T14:19:23.000Z"),
+			fields.get("provider-timestamps"));
+	}
+
+	@Test
+	public void testEmitRejectsAFieldTimestampWithoutATimeZone() {
+		FIPSAuditEvent fipsAuditEvent = new FIPSAuditEvent(
+			RandomTestUtil.randomString(), FIPSAuditEvent.Severity.INFO);
+
+		fipsAuditEvent.put(
+			"provider-timestamp", LocalDateTime.parse("2026-05-06T14:19:23"));
+
+		Assert.assertThrows(
+			IllegalArgumentException.class,
+			() -> FIPSAuditEventEmitterUtil.emit(fipsAuditEvent));
+	}
+
+	@Test
+	public void testEmitSequencesRecordsMonotonically() {
+		FIPSAuditEventEmitterUtil.emit(
+			new FIPSAuditEvent(
+				RandomTestUtil.randomString(), FIPSAuditEvent.Severity.INFO));
+		FIPSAuditEventEmitterUtil.emit(
+			new FIPSAuditEvent(
+				RandomTestUtil.randomString(), FIPSAuditEvent.Severity.INFO));
+
+		List<Map<String, Object>> records = _getRecords(Level.INFO);
+
+		Assert.assertEquals(records.toString(), 2, records.size());
+
+		Map<String, Object> record1 = records.get(0);
+		Map<String, Object> record2 = records.get(1);
+
+		long eventSequence1 = (Long)record1.get("event-sequence");
+		long eventSequence2 = (Long)record2.get("event-sequence");
+
+		Assert.assertEquals(
+			records.toString(), eventSequence1 + 1, eventSequence2);
+	}
+
+	@Test
 	public void testEmitSyncsCriticalRecordOnly() {
 		_mockLogManager(_mockRollingFileAppender("/dev/null/missing.ndjson"));
 
@@ -419,6 +505,24 @@ public class FIPSAuditEventEmitterUtilTest {
 		Map<String, Object> record = _getRecord(level);
 
 		Assert.assertEquals(severity.getValue(), record.get("severity"));
+	}
+
+	private void _testEmitNormalizesFieldTimestamp(
+		String expectedTimestamp, Object value) {
+
+		FIPSAuditEvent fipsAuditEvent = new FIPSAuditEvent(
+			RandomTestUtil.randomString(), FIPSAuditEvent.Severity.INFO);
+
+		fipsAuditEvent.put("provider-timestamp", value);
+
+		FIPSAuditEventEmitterUtil.emit(fipsAuditEvent);
+
+		Map<String, Object> record = _getRecord(Level.INFO);
+
+		Map<?, ?> fields = (Map<?, ?>)record.get("fields");
+
+		Assert.assertEquals(
+			expectedTimestamp, fields.get("provider-timestamp"));
 	}
 
 	private void _testEmitThrows() {

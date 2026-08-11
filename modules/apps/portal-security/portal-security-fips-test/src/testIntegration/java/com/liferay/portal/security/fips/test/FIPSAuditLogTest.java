@@ -86,6 +86,37 @@ public class FIPSAuditLogTest {
 	}
 
 	@Test
+	public void testAuditLogRecordsCarryACanonicalTimestamp() throws Exception {
+		for (JSONObject jsonObject : _getRecordJSONObjects()) {
+			String timestamp = jsonObject.getString("timestamp");
+
+			Assert.assertTrue(
+				StringBundler.concat(
+					"Noncanonical timestamp \"", timestamp,
+					"\" in the FIPS audit record ", jsonObject),
+				timestamp.matches(
+					"\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z"));
+		}
+	}
+
+	@Test
+	public void testAuditLogRecordsCarryAMonotonicSequence() throws Exception {
+		long previousEventSequence = 0;
+
+		for (JSONObject jsonObject : _getRecordJSONObjects()) {
+			long eventSequence = jsonObject.getLong("event-sequence");
+
+			if (eventSequence > previousEventSequence) {
+				Assert.assertEquals(
+					String.valueOf(jsonObject), previousEventSequence + 1,
+					eventSequence);
+			}
+
+			previousEventSequence = eventSequence;
+		}
+	}
+
+	@Test
 	public void testAuditLogRecordsCarryTheCommonEnvelope() throws Exception {
 		for (JSONObject jsonObject : _getRecordJSONObjects()) {
 			for (String envelopeKey : _ENVELOPE_KEYS) {
@@ -145,8 +176,8 @@ public class FIPSAuditLogTest {
 
 	private static final String[] _ENVELOPE_KEYS = {
 		"cmvp-certificate-id", "deployment-instance-id", "event-schema-version",
-		"event-type", "fields", "provider-name", "provider-version", "severity",
-		"timestamp"
+		"event-sequence", "event-type", "fields", "provider-name",
+		"provider-version", "severity", "timestamp"
 	};
 
 }
