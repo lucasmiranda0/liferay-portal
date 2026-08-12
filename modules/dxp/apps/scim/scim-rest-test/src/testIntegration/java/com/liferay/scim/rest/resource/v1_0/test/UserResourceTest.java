@@ -41,6 +41,7 @@ import com.liferay.portal.kernel.util.StringUtil;
 import com.liferay.portal.kernel.workflow.WorkflowConstants;
 import com.liferay.portal.test.rule.Inject;
 import com.liferay.portal.test.rule.LiferayIntegrationTestRule;
+import com.liferay.scim.rest.client.dto.v1_0.Address;
 import com.liferay.scim.rest.client.dto.v1_0.MultiValuedAttribute;
 import com.liferay.scim.rest.client.dto.v1_0.Name;
 import com.liferay.scim.rest.client.dto.v1_0.Operation;
@@ -436,6 +437,26 @@ public class UserResourceTest extends BaseUserResourceTestCase {
 			postUser4.getExternalId(), TestPropsValues.getCompanyId());
 
 		Assert.assertTrue(portalUser4.isActive());
+
+		// Provision a user with an address whose country, type, and street
+		// address are unresolvable, as Azure AD's default SCIM connector sends
+		// them (LPP-65181)
+
+		User postUser5 = randomUser();
+
+		postUser5.setAddresses(
+			new Address[] {
+				new Address() {
+					{
+						country = "ZZ";
+						primary = true;
+						type = "work";
+					}
+				}
+			});
+
+		assertHttpResponseStatusCode(
+			201, userResource.postV2UserHttpResponse(postUser5));
 
 		ConfigurationTestUtil.deleteConfiguration(_pid);
 
