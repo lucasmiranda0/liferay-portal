@@ -33,6 +33,7 @@ import com.liferay.portal.kernel.model.Address;
 import com.liferay.portal.kernel.model.Company;
 import com.liferay.portal.kernel.model.Contact;
 import com.liferay.portal.kernel.model.Country;
+import com.liferay.portal.kernel.model.ListType;
 import com.liferay.portal.kernel.model.Region;
 import com.liferay.portal.kernel.model.UserGroup;
 import com.liferay.portal.kernel.model.UserGroupTable;
@@ -596,29 +597,36 @@ public class UserManagerImpl implements UserManager {
 			address.setClassName(Contact.class.getName());
 			address.setClassPK(portalUser.getContactId());
 
-			Country country = _countryLocalService.getCountryByA2(
+			Country country = _countryLocalService.fetchCountryByA2(
 				portalUser.getCompanyId(), scimAddress.getCountry());
 
-			address.setCountryId(country.getCountryId());
+			if (country != null) {
+				address.setCountryId(country.getCountryId());
+
+				for (Region region :
+						_regionLocalService.getRegions(
+							country.getCountryId(), true)) {
+
+					if (Objects.equals(
+							region.getName(), scimAddress.getRegion())) {
+
+						address.setRegionId(region.getRegionId());
+
+						break;
+					}
+				}
+			}
 
 			if (Validator.isNull(scimAddress.getType())) {
 				scimAddress.setType("other");
 			}
 
-			address.setListTypeId(
-				_listTypeLocalService.getListTypeId(
-					portalUser.getCompanyId(), scimAddress.getType(),
-					Contact.class.getName() + ".address"));
+			ListType listType = _listTypeLocalService.fetchListType(
+				portalUser.getCompanyId(), scimAddress.getType(),
+				Contact.class.getName() + ".address");
 
-			for (Region region :
-					_regionLocalService.getRegions(
-						country.getCountryId(), true)) {
-
-				if (Objects.equals(region.getName(), scimAddress.getRegion())) {
-					address.setRegionId(region.getRegionId());
-
-					break;
-				}
+			if (listType != null) {
+				address.setListTypeId(listType.getListTypeId());
 			}
 
 			address.setCity(scimAddress.getLocality());
@@ -627,7 +635,9 @@ public class UserManagerImpl implements UserManager {
 			String[] streetAddressParts = StringUtil.split(
 				scimAddress.getStreetAddress(), "\n");
 
-			address.setStreet1(streetAddressParts[0]);
+			if (streetAddressParts.length > 0) {
+				address.setStreet1(streetAddressParts[0]);
+			}
 
 			if (streetAddressParts.length > 1) {
 				address.setStreet2(streetAddressParts[1]);
