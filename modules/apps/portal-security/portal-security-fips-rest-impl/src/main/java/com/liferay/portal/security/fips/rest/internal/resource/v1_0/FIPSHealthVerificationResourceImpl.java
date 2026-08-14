@@ -8,6 +8,9 @@ package com.liferay.portal.security.fips.rest.internal.resource.v1_0;
 import com.liferay.portal.kernel.security.fips.FIPSApplicationState;
 import com.liferay.portal.kernel.security.fips.FIPSApplicationStateMachineUtil;
 import com.liferay.portal.kernel.security.fips.FIPSModeValidator;
+import com.liferay.portal.kernel.security.permission.ActionKeys;
+import com.liferay.portal.kernel.security.permission.PermissionThreadLocal;
+import com.liferay.portal.kernel.service.permission.PortalPermissionUtil;
 import com.liferay.portal.kernel.util.PropsValues;
 import com.liferay.portal.security.fips.rest.dto.v1_0.FIPSHealthVerification;
 import com.liferay.portal.security.fips.rest.resource.v1_0.FIPSHealthVerificationResource;
@@ -41,6 +44,10 @@ public class FIPSHealthVerificationResourceImpl
 					Response.Status.NOT_FOUND
 				).build());
 		}
+
+		PortalPermissionUtil.check(
+			PermissionThreadLocal.getPermissionChecker(),
+			ActionKeys.VERIFY_FIPS_HEALTH);
 
 		FIPSHealthVerification fipsHealthVerification =
 			new FIPSHealthVerification();
