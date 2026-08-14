@@ -262,6 +262,8 @@ public class ActionKeys {
 
 	public static final String UPDATE_USER = "UPDATE_USER";
 
+	public static final String VERIFY_FIPS_HEALTH = "VERIFY_FIPS_HEALTH";
+
 	public static final String VIEW = "VIEW";
 
 	public static final String VIEW_CONTROL_PANEL = "VIEW_CONTROL_PANEL";

@@ -24,6 +24,7 @@
 				<action-key>IMPERSONATE</action-key>
 				<action-key>MANAGE_LANGUAGE_OVERRIDES</action-key>
 				<action-key>UNLINK_LAYOUT_SET_PROTOTYPE</action-key>
+				<action-key>VERIFY_FIPS_HEALTH</action-key>
 				<action-key>VIEW_CONTROL_PANEL</action-key>
 			</supports>
 			<site-member-defaults />
