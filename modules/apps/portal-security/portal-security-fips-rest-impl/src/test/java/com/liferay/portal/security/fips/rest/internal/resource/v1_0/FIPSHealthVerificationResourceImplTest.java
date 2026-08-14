@@ -5,8 +5,12 @@
 
 package com.liferay.portal.security.fips.rest.internal.resource.v1_0;
 
+import com.liferay.portal.kernel.model.Group;
+import com.liferay.portal.kernel.security.auth.PrincipalException;
 import com.liferay.portal.kernel.security.fips.FIPSApplicationState;
 import com.liferay.portal.kernel.security.fips.FIPSApplicationStateMachineUtil;
+import com.liferay.portal.kernel.security.permission.PermissionChecker;
+import com.liferay.portal.kernel.security.permission.PermissionThreadLocal;
 import com.liferay.portal.kernel.test.ReflectionTestUtil;
 import com.liferay.portal.kernel.util.PropsValues;
 import com.liferay.portal.security.fips.rest.dto.v1_0.FIPSHealthVerification;
@@ -15,6 +19,8 @@ import com.liferay.portal.test.rule.LiferayUnitTestRule;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.RuntimeDelegate;
+
+import java.util.HashMap;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -77,6 +83,8 @@ public class FIPSHealthVerificationResourceImplTest {
 		ReflectionTestUtil.setFieldValue(
 			PropsValues.class, "FIPS_ENABLED", _fipsEnabled);
 
+		PermissionThreadLocal.setPermissionChecker(null);
+
 		RuntimeDelegate.setInstance(null);
 	}
 
@@ -88,6 +96,16 @@ public class FIPSHealthVerificationResourceImplTest {
 		try (MockedStatic<FIPSApplicationStateMachineUtil>
 				fipsApplicationStateMachineUtilMockedStatic =
 					Mockito.mockStatic(FIPSApplicationStateMachineUtil.class)) {
+
+			_setUpPermissionChecker(false);
+
+			Assert.assertThrows(
+				PrincipalException.MustHavePermission.class,
+				fipsHealthVerificationResourceImpl::postFIPSHealthVerification);
+
+			fipsApplicationStateMachineUtilMockedStatic.verifyNoInteractions();
+
+			_setUpPermissionChecker(true);
 
 			_testPostFIPSHealthVerification(
 				FIPSApplicationState.ERROR,
@@ -129,6 +147,27 @@ public class FIPSHealthVerificationResourceImplTest {
 				FIPSHealthVerification.Status.OPERATIONAL,
 				fipsHealthVerification.getStatus());
 		}
+	}
+
+	private void _setUpPermissionChecker(boolean hasPermission) {
+		PermissionChecker permissionChecker = Mockito.mock(
+			PermissionChecker.class);
+
+		Mockito.when(
+			permissionChecker.getPermissionChecksMap()
+		).thenReturn(
+			new HashMap<>()
+		);
+
+		Mockito.when(
+			permissionChecker.hasPermission(
+				Mockito.nullable(Group.class), Mockito.anyString(),
+				Mockito.anyString(), Mockito.anyString())
+		).thenReturn(
+			hasPermission
+		);
+
+		PermissionThreadLocal.setPermissionChecker(permissionChecker);
 	}
 
 	private void _testPostFIPSHealthVerification(
