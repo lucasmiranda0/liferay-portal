@@ -220,6 +220,14 @@ public class OfflineOpenIdConnectSessionManagerTest {
 		OpenIdConnectSession openIdConnectSession = Mockito.mock(
 			OpenIdConnectSession.class);
 
+		long openIdConnectSessionId = RandomTestUtil.randomLong();
+
+		Mockito.when(
+			openIdConnectSession.getOpenIdConnectSessionId()
+		).thenReturn(
+			openIdConnectSessionId
+		);
+
 		Mockito.when(
 			openIdConnectSessionLocalService.fetchOpenIdConnectSession(
 				Mockito.anyLong(), Mockito.anyString(), Mockito.anyString())
@@ -254,6 +262,16 @@ public class OfflineOpenIdConnectSessionManagerTest {
 			openIdConnectSession
 		).setIdToken(
 			idTokenString
+		);
+
+		// LPD-102783 The identity provider issues no "sid" claim, so a
+		// unique session ID is generated to keep the issuer and session ID
+		// pair unique
+
+		Mockito.verify(
+			openIdConnectSession
+		).setSessionId(
+			"liferay-" + openIdConnectSessionId
 		);
 	}
 
@@ -297,6 +315,30 @@ public class OfflineOpenIdConnectSessionManagerTest {
 			openIdConnectSession
 		).setSessionId(
 			sessionId
+		);
+
+		// LPD-102783 An identity provider that issues no "sid" claim must
+		// not clear a session ID that was stored earlier
+
+		PlainJWT noSessionIdPlainJWT = new PlainJWT(
+			new JWTClaimsSet.Builder(
+			).issuer(
+				issuer
+			).build());
+
+		OpenIdConnectSession noSessionIdOpenIdConnectSession = Mockito.mock(
+			OpenIdConnectSession.class);
+
+		ReflectionTestUtil.invoke(
+			new OfflineOpenIdConnectSessionManager(),
+			"_updateOpenIdConnectSessionIdToken",
+			new Class<?>[] {String.class, OpenIdConnectSession.class},
+			noSessionIdPlainJWT.serialize(), noSessionIdOpenIdConnectSession);
+
+		Mockito.verify(
+			noSessionIdOpenIdConnectSession, Mockito.never()
+		).setSessionId(
+			Mockito.any()
 		);
 	}
 
