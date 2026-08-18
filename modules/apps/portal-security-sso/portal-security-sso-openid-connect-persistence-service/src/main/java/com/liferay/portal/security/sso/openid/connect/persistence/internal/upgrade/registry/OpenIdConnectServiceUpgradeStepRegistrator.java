@@ -65,6 +65,11 @@ public class OpenIdConnectServiceUpgradeStepRegistrator
 			UpgradeProcessFactory.addColumns(
 				"OpenIdConnectSession", "issuer VARCHAR(75) null",
 				"sessionId VARCHAR(75) null"));
+
+		registry.register(
+			"2.5.0", "2.6.0",
+			new com.liferay.portal.security.sso.openid.connect.persistence.
+				internal.upgrade.v2_6_0.OpenIdConnectSessionUpgradeProcess());
 	}
 
 	@Reference

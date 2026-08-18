@@ -337,6 +337,12 @@ public class OfflineOpenIdConnectSessionManager {
 				new Date(currentTime + Time.HOUR));
 		}
 
+		if (Validator.isNull(openIdConnectSession.getSessionId())) {
+			openIdConnectSession.setSessionId(
+				_SESSION_ID_PREFIX +
+					openIdConnectSession.getOpenIdConnectSessionId());
+		}
+
 		_openIdConnectSessionLocalService.updateOpenIdConnectSession(
 			openIdConnectSession);
 	}
@@ -371,8 +377,12 @@ public class OfflineOpenIdConnectSessionManager {
 			JWTClaimsSet jwtClaimsSet = jwt.getJWTClaimsSet();
 
 			openIdConnectSession.setIssuer(jwtClaimsSet.getIssuer());
-			openIdConnectSession.setSessionId(
-				jwtClaimsSet.getClaimAsString("sid"));
+
+			String sessionId = jwtClaimsSet.getClaimAsString("sid");
+
+			if (Validator.isNotNull(sessionId)) {
+				openIdConnectSession.setSessionId(sessionId);
+			}
 		}
 		catch (ParseException parseException) {
 			if (_log.isWarnEnabled()) {
@@ -380,6 +390,8 @@ public class OfflineOpenIdConnectSessionManager {
 			}
 		}
 	}
+
+	private static final String _SESSION_ID_PREFIX = "liferay-";
 
 	private static final Log _log = LogFactoryUtil.getLog(
 		OfflineOpenIdConnectSessionManager.class);
