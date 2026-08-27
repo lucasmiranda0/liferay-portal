@@ -681,6 +681,10 @@
 			<description name="Finds unnecessary `else` statement (when `if` and `else` statement both end with `return` statement)." />
 			<property name="enabled" value="false" />
 		</check>
+		<check name="JavaSecretComparisonCheck">
+			<category name="Security" />
+			<description name="Finds secrets compared with a method that returns at the first differing byte." />
+		</check>
 		<check name="JavaSeeAnnotationCheck">
 			<category name="Bug Prevention" />
 			<description name="Checks for nested annotations inside `@see`." />
