@@ -972,6 +972,23 @@ public class JavaSourceProcessorTest extends BaseSourceProcessorTestCase {
 	}
 
 	@Test
+	public void testSecretComparison() throws Exception {
+		test(
+			SourceProcessorTestParameters.create(
+				"SecretComparison.testjava"
+			).addExpectedMessage(
+				"Use MessageDigest.isEqual to compare secrets, see LPD-93281",
+				30
+			).addExpectedMessage(
+				"Use MessageDigest.isEqual to compare secrets, see LPD-93281",
+				34
+			).addExpectedMessage(
+				"Use MessageDigest.isEqual to compare secrets, see LPD-93281",
+				38
+			));
+	}
+
+	@Test
 	public void testSecureRandomNumberGeneration() throws Exception {
 		test(
 			"SecureRandomNumberGeneration.testjava",
