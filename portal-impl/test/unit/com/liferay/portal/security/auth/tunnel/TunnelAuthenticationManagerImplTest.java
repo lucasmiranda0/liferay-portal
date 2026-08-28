@@ -6,9 +6,16 @@
 package com.liferay.portal.security.auth.tunnel;
 
 import com.liferay.petra.lang.SafeCloseable;
+import com.liferay.portal.kernel.encryptor.Encryptor;
+import com.liferay.portal.kernel.encryptor.EncryptorUtil;
+import com.liferay.portal.kernel.module.service.Snapshot;
+import com.liferay.portal.kernel.security.auth.AuthException;
+import com.liferay.portal.kernel.security.auth.RemoteAuthException;
+import com.liferay.portal.kernel.servlet.HttpHeaders;
 import com.liferay.portal.kernel.test.ReflectionTestUtil;
 import com.liferay.portal.kernel.test.util.PropsValuesTestUtil;
 import com.liferay.portal.kernel.test.util.RandomTestUtil;
+import com.liferay.portal.kernel.util.Base64;
 import com.liferay.portal.test.rule.LiferayUnitTestRule;
 
 import java.security.Key;
@@ -17,6 +24,10 @@ import org.junit.Assert;
 import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
+
+import org.mockito.Mockito;
+
+import org.springframework.mock.web.MockHttpServletRequest;
 
 /**
  * @author Lucas Miranda
@@ -65,6 +76,47 @@ public class TunnelAuthenticationManagerImplTest {
 
 				Assert.assertEquals("AES", key.getAlgorithm());
 			}
+		}
+	}
+
+	@Test
+	public void testGetUserId() throws Exception {
+		Snapshot<Encryptor> snapshot = Mockito.mock(Snapshot.class);
+
+		Mockito.when(
+			snapshot.get()
+		).thenReturn(
+			Mockito.mock(Encryptor.class)
+		);
+
+		try (AutoCloseable autoCloseable =
+				ReflectionTestUtil.setFieldValueWithAutoCloseable(
+					EncryptorUtil.class, "_encryptorSnapshot", snapshot);
+			SafeCloseable safeCloseable =
+				PropsValuesTestUtil.swapWithSafeCloseable(
+					"TUNNELING_SERVLET_SHARED_SECRET", _SHARED_SECRET)) {
+
+			MockHttpServletRequest mockHttpServletRequest =
+				new MockHttpServletRequest();
+
+			String login = RandomTestUtil.randomString();
+
+			String encodedLogin = Base64.encode(login.getBytes());
+
+			mockHttpServletRequest.addHeader(
+				HttpHeaders.AUTHORIZATION, "Basic " + encodedLogin);
+
+			TunnelAuthenticationManagerImpl tunnelAuthenticationManagerImpl =
+				new TunnelAuthenticationManagerImpl();
+
+			AuthException authException = Assert.assertThrows(
+				AuthException.class,
+				() -> tunnelAuthenticationManagerImpl.getUserId(
+					mockHttpServletRequest));
+
+			Assert.assertEquals(
+				RemoteAuthException.WRONG_SHARED_SECRET,
+				authException.getType());
 		}
 	}
 

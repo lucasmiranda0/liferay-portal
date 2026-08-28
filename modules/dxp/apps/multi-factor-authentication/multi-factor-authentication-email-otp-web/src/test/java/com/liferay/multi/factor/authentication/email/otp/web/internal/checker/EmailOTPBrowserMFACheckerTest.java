@@ -5,8 +5,13 @@
 
 package com.liferay.multi.factor.authentication.email.otp.web.internal.checker;
 
+import com.liferay.multi.factor.authentication.email.otp.web.internal.constants.MFAEmailOTPWebKeys;
 import com.liferay.portal.kernel.module.util.SystemBundleUtil;
+import com.liferay.portal.kernel.test.ReflectionTestUtil;
+import com.liferay.portal.kernel.test.util.RandomTestUtil;
 import com.liferay.portal.test.rule.LiferayUnitTestRule;
+
+import jakarta.servlet.http.HttpSession;
 
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -70,6 +75,35 @@ public class EmailOTPBrowserMFACheckerTest {
 			"te***1@liferay.com",
 			EmailOTPBrowserMFAChecker.obfuscateEmailAddress(
 				"test11@liferay.com"));
+	}
+
+	@Test
+	public void testVerify() throws Exception {
+		EmailOTPBrowserMFAChecker emailOTPBrowserMFAChecker =
+			new EmailOTPBrowserMFAChecker();
+
+		String otp = RandomTestUtil.randomString();
+
+		Assert.assertFalse(_verify(emailOTPBrowserMFAChecker, null, otp));
+		Assert.assertFalse(_verify(emailOTPBrowserMFAChecker, otp, null));
+		Assert.assertTrue(_verify(emailOTPBrowserMFAChecker, otp, otp));
+	}
+
+	private boolean _verify(
+		EmailOTPBrowserMFAChecker emailOTPBrowserMFAChecker,
+		String expectedMFAEmailOTP, String otp) {
+
+		HttpSession httpSession = Mockito.mock(HttpSession.class);
+
+		Mockito.when(
+			httpSession.getAttribute(MFAEmailOTPWebKeys.MFA_EMAIL_OTP)
+		).thenReturn(
+			expectedMFAEmailOTP
+		);
+
+		return ReflectionTestUtil.invoke(
+			emailOTPBrowserMFAChecker, "_verify",
+			new Class<?>[] {HttpSession.class, String.class}, httpSession, otp);
 	}
 
 	private static final MockedStatic<FrameworkUtil>
