@@ -6,9 +6,16 @@
 package com.liferay.portal.security.auth.tunnel;
 
 import com.liferay.petra.lang.SafeCloseable;
+import com.liferay.portal.kernel.encryptor.Encryptor;
+import com.liferay.portal.kernel.encryptor.EncryptorUtil;
+import com.liferay.portal.kernel.module.service.Snapshot;
+import com.liferay.portal.kernel.security.auth.AuthException;
+import com.liferay.portal.kernel.security.auth.RemoteAuthException;
+import com.liferay.portal.kernel.servlet.HttpHeaders;
 import com.liferay.portal.kernel.test.ReflectionTestUtil;
 import com.liferay.portal.kernel.test.util.PropsValuesTestUtil;
 import com.liferay.portal.kernel.test.util.RandomTestUtil;
+import com.liferay.portal.kernel.util.Base64;
 import com.liferay.portal.test.rule.LiferayUnitTestRule;
 
 import java.security.Key;
@@ -17,6 +24,10 @@ import org.junit.Assert;
 import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
+
+import org.mockito.Mockito;
+
+import org.springframework.mock.web.MockHttpServletRequest;
 
 /**
  * @author Lucas Miranda
@@ -68,10 +79,84 @@ public class TunnelAuthenticationManagerImplTest {
 		}
 	}
 
+	@Test
+	public void testGetUserIdWhenPasswordDoesNotMatch() throws Exception {
+		try (SafeCloseable safeCloseable1 =
+				PropsValuesTestUtil.swapWithSafeCloseable(
+					"FIPS_ENABLED", false);
+			SafeCloseable safeCloseable2 =
+				PropsValuesTestUtil.swapWithSafeCloseable(
+					"TUNNELING_SERVLET_ENCRYPTION_ALGORITHM", "Blowfish");
+			SafeCloseable safeCloseable3 =
+				PropsValuesTestUtil.swapWithSafeCloseable(
+					"TUNNELING_SERVLET_SHARED_SECRET", _SHARED_SECRET);
+			SafeCloseable safeCloseable4 =
+				PropsValuesTestUtil.swapWithSafeCloseable(
+					"TUNNELING_SERVLET_SHARED_SECRET_HEX", false)) {
+
+			try (AutoCloseable autoCloseable = _swapEncryptor()) {
+
+				// Credentials without a colon leave the password null
+
+				Assert.assertEquals(
+					RemoteAuthException.WRONG_SHARED_SECRET,
+					_getAuthExceptionType("admin"));
+
+				// Credentials with a password that is not the shared secret
+
+				Assert.assertEquals(
+					RemoteAuthException.WRONG_SHARED_SECRET,
+					_getAuthExceptionType("admin:invalidPassword"));
+			}
+		}
+	}
+
+	private int _getAuthExceptionType(String credentials) {
+		MockHttpServletRequest mockHttpServletRequest =
+			new MockHttpServletRequest();
+
+		mockHttpServletRequest.addHeader(
+			HttpHeaders.AUTHORIZATION,
+			"Basic " + Base64.encode(credentials.getBytes()));
+
+		TunnelAuthenticationManagerImpl tunnelAuthenticationManagerImpl =
+			new TunnelAuthenticationManagerImpl();
+
+		try {
+			tunnelAuthenticationManagerImpl.getUserId(mockHttpServletRequest);
+		}
+		catch (AuthException authException) {
+			return authException.getType();
+		}
+
+		throw new AssertionError();
+	}
+
 	private Key _getSharedSecretKey() {
 		return ReflectionTestUtil.invoke(
 			new TunnelAuthenticationManagerImpl(), "getSharedSecretKey",
 			new Class<?>[0]);
+	}
+
+	private AutoCloseable _swapEncryptor() throws Exception {
+		Encryptor encryptor = Mockito.mock(Encryptor.class);
+
+		Mockito.when(
+			encryptor.encrypt(Mockito.any(Key.class), Mockito.anyString())
+		).thenReturn(
+			RandomTestUtil.randomString(16)
+		);
+
+		Snapshot<Encryptor> snapshot = Mockito.mock(Snapshot.class);
+
+		Mockito.when(
+			snapshot.get()
+		).thenReturn(
+			encryptor
+		);
+
+		return ReflectionTestUtil.setFieldValueWithAutoCloseable(
+			EncryptorUtil.class, "_encryptorSnapshot", snapshot);
 	}
 
 	private static final String _SHARED_SECRET = RandomTestUtil.randomString(
