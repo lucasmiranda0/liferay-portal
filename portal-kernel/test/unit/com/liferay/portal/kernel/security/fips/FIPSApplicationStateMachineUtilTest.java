@@ -7,6 +7,7 @@ package com.liferay.portal.kernel.security.fips;
 
 import com.liferay.petra.lang.SafeCloseable;
 import com.liferay.portal.kernel.internal.log4j.FIPSLog4jUtil;
+import com.liferay.portal.kernel.log.Log;
 import com.liferay.portal.kernel.test.ReflectionTestUtil;
 import com.liferay.portal.kernel.test.util.PropsValuesTestUtil;
 import com.liferay.portal.kernel.test.util.RandomTestUtil;
@@ -17,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.IntConsumer;
 
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
@@ -58,10 +60,25 @@ public class FIPSApplicationStateMachineUtilTest {
 
 	@Before
 	public void setUp() {
-		Mockito.reset(_logger);
+		Mockito.reset(_log, _logger);
 
 		_safeCloseable = PropsValuesTestUtil.swapWithSafeCloseable(
 			"FIPS_AUDIT_DEPLOYMENT_INSTANCE_ID", RandomTestUtil.randomString());
+
+		_exitStatuses.clear();
+
+		_exitFIPSAuditLogEntryCount = -1;
+
+		_originalExit = ReflectionTestUtil.getAndSetFieldValue(
+			FIPSApplicationStateMachineUtil.class, "_exit",
+			(IntConsumer)status -> {
+				_exitStatuses.add(status);
+
+				_exitFIPSAuditLogEntryCount = _fipsAuditLogEntries.size();
+			});
+
+		_originalLog = ReflectionTestUtil.getAndSetFieldValue(
+			FIPSApplicationStateMachineUtil.class, "_log", _log);
 
 		Mockito.doAnswer(
 			invocation -> {
@@ -84,6 +101,11 @@ public class FIPSApplicationStateMachineUtilTest {
 
 	@After
 	public void tearDown() {
+		ReflectionTestUtil.setFieldValue(
+			FIPSApplicationStateMachineUtil.class, "_exit", _originalExit);
+		ReflectionTestUtil.setFieldValue(
+			FIPSApplicationStateMachineUtil.class, "_log", _originalLog);
+
 		_safeCloseable.close();
 	}
 
@@ -94,6 +116,27 @@ public class FIPSApplicationStateMachineUtilTest {
 		_testError(FIPSApplicationState.OPERATIONAL);
 		_testError(FIPSApplicationState.QUIESCENT);
 		_testError(FIPSApplicationState.SELF_TEST);
+
+		Mockito.doThrow(
+			new RuntimeException()
+		).when(
+			_log
+		).error(
+			Mockito.anyString(), Mockito.any(Throwable.class)
+		);
+
+		_assertErrorExitsWhenThrowing();
+
+		Mockito.doThrow(
+			new RuntimeException()
+		).when(
+			_logger
+		).log(
+			Mockito.any(Level.class), Mockito.any(Marker.class),
+			Mockito.any(Message.class)
+		);
+
+		_assertErrorExitsWhenThrowing();
 	}
 
 	@Test
@@ -123,11 +166,11 @@ public class FIPSApplicationStateMachineUtilTest {
 				}));
 
 		Assert.assertEquals(
-			FIPSApplicationState.ERROR,
+			FIPSApplicationState.POWER_OFF,
 			FIPSApplicationStateMachineUtil.getFIPSApplicationState());
 
 		Assert.assertEquals(
-			_fipsAuditLogEntries.toString(), 2, _fipsAuditLogEntries.size());
+			_fipsAuditLogEntries.toString(), 3, _fipsAuditLogEntries.size());
 
 		_assertEnvelope(
 			_fipsAuditLogEntries.get(1), "severity",
@@ -261,11 +304,11 @@ public class FIPSApplicationStateMachineUtilTest {
 				}));
 
 		Assert.assertEquals(
-			FIPSApplicationState.ERROR,
+			FIPSApplicationState.POWER_OFF,
 			FIPSApplicationStateMachineUtil.getFIPSApplicationState());
 
 		Assert.assertEquals(
-			_fipsAuditLogEntries.toString(), 3, _fipsAuditLogEntries.size());
+			_fipsAuditLogEntries.toString(), 4, _fipsAuditLogEntries.size());
 
 		_assertEnvelope(
 			_fipsAuditLogEntries.get(1), "event-type",
@@ -464,11 +507,11 @@ public class FIPSApplicationStateMachineUtilTest {
 				}));
 
 		Assert.assertEquals(
-			FIPSApplicationState.ERROR,
+			FIPSApplicationState.POWER_OFF,
 			FIPSApplicationStateMachineUtil.getFIPSApplicationState());
 
 		Assert.assertEquals(
-			_fipsAuditLogEntries.toString(), 2, _fipsAuditLogEntries.size());
+			_fipsAuditLogEntries.toString(), 3, _fipsAuditLogEntries.size());
 
 		_assertField(
 			_fipsAuditLogEntries.get(1), "to-state",
@@ -487,6 +530,20 @@ public class FIPSApplicationStateMachineUtilTest {
 		Map<String, Object> fipsAuditLogEntry, String key, String value) {
 
 		Assert.assertEquals(value, fipsAuditLogEntry.get(key));
+	}
+
+	private void _assertErrorExitsWhenThrowing() {
+		_exitStatuses.clear();
+
+		_setFIPSApplicationState(FIPSApplicationState.OPERATIONAL);
+
+		Assert.assertThrows(
+			RuntimeException.class,
+			() -> FIPSApplicationStateMachineUtil.error(
+				RandomTestUtil.randomString(),
+				new SecurityException(RandomTestUtil.randomString())));
+
+		Assert.assertEquals(List.of(1), _exitStatuses);
 	}
 
 	private void _assertField(
@@ -555,6 +612,9 @@ public class FIPSApplicationStateMachineUtilTest {
 	}
 
 	private void _testError(FIPSApplicationState fipsApplicationState) {
+		Mockito.reset(_log);
+
+		_exitStatuses.clear();
 		_fipsAuditLogEntries.clear();
 
 		_setFIPSApplicationState(fipsApplicationState);
@@ -566,11 +626,11 @@ public class FIPSApplicationStateMachineUtilTest {
 			failedStep, new SecurityException(providerErrorMessage));
 
 		Assert.assertEquals(
-			FIPSApplicationState.ERROR,
+			FIPSApplicationState.POWER_OFF,
 			FIPSApplicationStateMachineUtil.getFIPSApplicationState());
 
 		Assert.assertEquals(
-			_fipsAuditLogEntries.toString(), 1, _fipsAuditLogEntries.size());
+			_fipsAuditLogEntries.toString(), 2, _fipsAuditLogEntries.size());
 
 		_assertEnvelope(
 			_fipsAuditLogEntries.get(0), "event-type", "fips-state-transition");
@@ -587,6 +647,30 @@ public class FIPSApplicationStateMachineUtilTest {
 		_assertField(
 			_fipsAuditLogEntries.get(0), "to-state",
 			FIPSApplicationState.ERROR.name());
+
+		_assertField(
+			_fipsAuditLogEntries.get(1), "from-state",
+			FIPSApplicationState.ERROR.name());
+		_assertField(_fipsAuditLogEntries.get(1), "initiating-actor", "Portal");
+		_assertField(
+			_fipsAuditLogEntries.get(1), "to-state",
+			FIPSApplicationState.POWER_OFF.name());
+
+		Assert.assertEquals(List.of(1), _exitStatuses);
+		Assert.assertEquals(2, _exitFIPSAuditLogEntryCount);
+
+		Mockito.verify(
+			_log
+		).error(
+			Mockito.contains(failedStep), Mockito.any(Throwable.class)
+		);
+
+		Mockito.verify(
+			_log
+		).error(
+			Mockito.contains(fipsApplicationState.name()),
+			Mockito.any(Throwable.class)
+		);
 	}
 
 	private void _testErrorWithIllegalState(
@@ -597,6 +681,8 @@ public class FIPSApplicationStateMachineUtilTest {
 			() -> FIPSApplicationStateMachineUtil.error(
 				RandomTestUtil.randomString(),
 				new SecurityException(RandomTestUtil.randomString())));
+
+		Assert.assertEquals(List.of(), _exitStatuses);
 	}
 
 	private void _testKeyCSPEntry(FIPSApplicationState fipsApplicationState) {
@@ -769,6 +855,7 @@ public class FIPSApplicationStateMachineUtilTest {
 	}
 
 	private void _testSelfTestWithFailure(RuntimeException runtimeException) {
+		_exitStatuses.clear();
 		_fipsAuditLogEntries.clear();
 
 		_setFIPSApplicationState(FIPSApplicationState.OPERATIONAL);
@@ -781,7 +868,7 @@ public class FIPSApplicationStateMachineUtilTest {
 				}));
 
 		Assert.assertEquals(
-			FIPSApplicationState.ERROR,
+			FIPSApplicationState.POWER_OFF,
 			FIPSApplicationStateMachineUtil.getFIPSApplicationState());
 
 		_assertEnvelope(
@@ -810,7 +897,14 @@ public class FIPSApplicationStateMachineUtilTest {
 			_fipsAuditLogEntries.get(2), "to-state",
 			FIPSApplicationState.ERROR.name());
 		Assert.assertEquals(
-			_fipsAuditLogEntries.toString(), 3, _fipsAuditLogEntries.size());
+			_fipsAuditLogEntries.toString(), 4, _fipsAuditLogEntries.size());
+
+		_assertField(_fipsAuditLogEntries.get(3), "initiating-actor", "Portal");
+		_assertField(
+			_fipsAuditLogEntries.get(3), "to-state",
+			FIPSApplicationState.POWER_OFF.name());
+
+		Assert.assertEquals(List.of(1), _exitStatuses);
 	}
 
 	private void _testSelfTestWithIllegalState(
@@ -823,13 +917,19 @@ public class FIPSApplicationStateMachineUtilTest {
 				}));
 	}
 
+	private static final Log _log = Mockito.mock(Log.class);
+
 	private static final Logger _logger = Mockito.mock(Logger.class);
 
+	private static final List<Integer> _exitStatuses = new ArrayList<>();
 	private static final MockedStatic<LogManager> _logManagerMockedStatic =
 		Mockito.mockStatic(LogManager.class, Mockito.CALLS_REAL_METHODS);
 
+	private int _exitFIPSAuditLogEntryCount;
 	private final List<Map<String, Object>> _fipsAuditLogEntries =
 		new ArrayList<>();
+	private IntConsumer _originalExit;
+	private Log _originalLog;
 	private SafeCloseable _safeCloseable;
 
 }
