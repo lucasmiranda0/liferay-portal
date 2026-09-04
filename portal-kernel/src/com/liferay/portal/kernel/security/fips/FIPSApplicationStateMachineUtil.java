@@ -14,6 +14,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
+import java.util.function.IntConsumer;
 
 /**
  * @author Jorge García Jiménez
@@ -21,13 +22,31 @@ import java.util.function.Consumer;
 public class FIPSApplicationStateMachineUtil {
 
 	public static void error(String failedStep, Throwable throwable) {
-		_transition(
-			FIPSApplicationState.ERROR,
-			fipsAuditEvent -> {
-				fipsAuditEvent.put("failed-step", failedStep);
-				fipsAuditEvent.put(
-					"provider-error-message", _getMessage(throwable));
-			});
+		FIPSApplicationState previousFIPSApplicationState =
+			_updateFIPSApplicationState(FIPSApplicationState.ERROR);
+
+		try {
+			_writeFIPSStateTransitionAuditEvent(
+				previousFIPSApplicationState, FIPSApplicationState.ERROR,
+				fipsAuditEvent -> {
+					fipsAuditEvent.put("failed-step", failedStep);
+					fipsAuditEvent.put(
+						"provider-error-message", _getMessage(throwable));
+				});
+
+			_log.error(
+				StringBundler.concat(
+					"Terminating the JVM because the FIPS application state ",
+					"changed from \"", previousFIPSApplicationState, "\" to \"",
+					FIPSApplicationState.ERROR, "\" at the step \"", failedStep,
+					"\": ", _getMessage(throwable)),
+				throwable);
+
+			powerOff("Portal");
+		}
+		finally {
+			_exit.accept(1);
+		}
 	}
 
 	public static FIPSApplicationState getFIPSApplicationState() {
@@ -46,8 +65,8 @@ public class FIPSApplicationStateMachineUtil {
 			});
 
 		_runAndTransitionToOperational(
-			"Key or CSP entry", "The operation completed successfully",
-			runnable);
+			"The operation completed successfully", runnable,
+			throwable -> error("Key or CSP entry", throwable));
 	}
 
 	public static void operational(String cryptoOfficerUserId, String reason) {
@@ -71,6 +90,18 @@ public class FIPSApplicationStateMachineUtil {
 				"initiating-actor", initiatingActor));
 	}
 
+	public static void preOperationalSelfTest(Runnable runnable) {
+		_transition(
+			FIPSApplicationState.SELF_TEST,
+			fipsAuditEvent -> fipsAuditEvent.put(
+				"message", "The pre-operational self tests started"));
+
+		_runAndTransitionToOperational(
+			"All checks and the validated provider self tests passed", runnable,
+			throwable -> _error(
+				"Self test", "pre-operational-health-failure", throwable));
+	}
+
 	public static void quiescent(String cryptoOfficerUserId, String reason) {
 		_transition(
 			FIPSApplicationState.QUIESCENT,
@@ -87,7 +118,10 @@ public class FIPSApplicationStateMachineUtil {
 			fipsAuditEvent -> fipsAuditEvent.put(
 				"message", "The integrity checks started"));
 
-		_runSelfTest(runnable);
+		_runAndTransitionToOperational(
+			"All checks and the validated provider self tests passed", runnable,
+			throwable -> _error(
+				"Self test", "periodic-health-failure", throwable));
 	}
 
 	public static void selfTest(
@@ -101,7 +135,34 @@ public class FIPSApplicationStateMachineUtil {
 				fipsAuditEvent.put("recovery-action", recoveryAction);
 			});
 
-		_runSelfTest(runnable);
+		_runAndTransitionToOperational(
+			"All checks and the validated provider self tests passed", runnable,
+			throwable -> _error(
+				"Self test", "periodic-health-failure", throwable));
+	}
+
+	private static void _error(
+		String failedStep, String failureEventType, Throwable throwable) {
+
+		try {
+			FIPSAuditEvent fipsAuditEvent = new FIPSAuditEvent(
+				failureEventType, FIPSAuditEvent.Severity.CRITICAL);
+
+			FIPSApplicationState fipsApplicationState =
+				getFIPSApplicationState();
+
+			fipsAuditEvent.put("failed-step", failedStep);
+			fipsAuditEvent.put("fips-state", fipsApplicationState.name());
+			fipsAuditEvent.put(
+				"provider-error-message", _getMessage(throwable));
+
+			FIPSAuditUtil.write(fipsAuditEvent);
+		}
+		catch (Exception exception) {
+			throwable.addSuppressed(exception);
+		}
+
+		error(failedStep, throwable);
 	}
 
 	private static String _getMessage(Throwable throwable) {
@@ -142,13 +203,19 @@ public class FIPSApplicationStateMachineUtil {
 	}
 
 	private static void _runAndTransitionToOperational(
-		String failedStep, String message, Runnable runnable) {
+		String message, Runnable runnable,
+		Consumer<Throwable> throwableConsumer) {
 
 		try {
 			runnable.run();
 		}
 		catch (Throwable throwable) {
-			error(failedStep, throwable);
+			try {
+				throwableConsumer.accept(throwable);
+			}
+			catch (Exception exception) {
+				throwable.addSuppressed(exception);
+			}
 
 			throw throwable;
 		}
@@ -158,36 +225,43 @@ public class FIPSApplicationStateMachineUtil {
 			fipsAuditEvent -> fipsAuditEvent.put("message", message));
 	}
 
-	private static void _runSelfTest(Runnable runnable) {
-		_runAndTransitionToOperational(
-			"Self test",
-			"All checks and the validated provider self tests passed",
-			runnable);
-	}
-
 	private static void _transition(
 		FIPSApplicationState fipsApplicationState,
 		Consumer<FIPSAuditEvent> fipsAuditEventConsumer) {
 
 		FIPSApplicationState previousFIPSApplicationState =
-			_fipsApplicationStateAtomicReference.getAndUpdate(
-				currentFIPSApplicationState -> {
-					Set<FIPSApplicationState> nextFIPSApplicationStates =
-						_allowedTransitions.getOrDefault(
-							currentFIPSApplicationState, Set.of());
+			_updateFIPSApplicationState(fipsApplicationState);
 
-					if (!nextFIPSApplicationStates.contains(
-							fipsApplicationState)) {
+		_writeFIPSStateTransitionAuditEvent(
+			previousFIPSApplicationState, fipsApplicationState,
+			fipsAuditEventConsumer);
+	}
 
-						throw new IllegalStateException(
-							StringBundler.concat(
-								"Unable to transition the FIPS application ",
-								"state from \"", currentFIPSApplicationState,
-								"\" to \"", fipsApplicationState, "\""));
-					}
+	private static FIPSApplicationState _updateFIPSApplicationState(
+		FIPSApplicationState fipsApplicationState) {
 
-					return fipsApplicationState;
-				});
+		return _fipsApplicationStateAtomicReference.getAndUpdate(
+			currentFIPSApplicationState -> {
+				Set<FIPSApplicationState> nextFIPSApplicationStates =
+					_allowedTransitions.getOrDefault(
+						currentFIPSApplicationState, Set.of());
+
+				if (!nextFIPSApplicationStates.contains(fipsApplicationState)) {
+					throw new IllegalStateException(
+						StringBundler.concat(
+							"Unable to transition the FIPS application state ",
+							"from \"", currentFIPSApplicationState, "\" to \"",
+							fipsApplicationState, "\""));
+				}
+
+				return fipsApplicationState;
+			});
+	}
+
+	private static void _writeFIPSStateTransitionAuditEvent(
+		FIPSApplicationState previousFIPSApplicationState,
+		FIPSApplicationState fipsApplicationState,
+		Consumer<FIPSAuditEvent> fipsAuditEventConsumer) {
 
 		FIPSAuditEvent fipsAuditEvent = new FIPSAuditEvent(
 			"fips-state-transition", _getSeverity(fipsApplicationState));
@@ -231,6 +305,7 @@ public class FIPSApplicationStateMachineUtil {
 			Set.of(
 				FIPSApplicationState.ERROR, FIPSApplicationState.OPERATIONAL,
 				FIPSApplicationState.POWER_OFF));
+	private static final IntConsumer _exit = System::exit;
 	private static final AtomicReference<FIPSApplicationState>
 		_fipsApplicationStateAtomicReference = new AtomicReference<>(
 			FIPSApplicationState.INITIALIZING);
