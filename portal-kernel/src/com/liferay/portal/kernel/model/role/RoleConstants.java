@@ -192,13 +192,15 @@ public class RoleConstants {
 			return false;
 		}
 
-		if (ArrayUtil.contains(_UNMODIFIABLE_ROLE_NAMES, role.getName()) ||
-			role.isSystem()) {
-
+		if (isUnmodifiable(role.getName()) || role.isSystem()) {
 			return true;
 		}
 
 		return false;
+	}
+
+	public static boolean isUnmodifiable(String roleName) {
+		return ArrayUtil.contains(_UNMODIFIABLE_ROLE_NAMES, roleName);
 	}
 
 	public static String toSystemRoleExternalReferenceCode(String roleName) {

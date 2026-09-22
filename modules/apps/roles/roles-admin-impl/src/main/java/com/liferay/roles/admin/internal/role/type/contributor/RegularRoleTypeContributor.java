@@ -10,7 +10,6 @@ import com.liferay.portal.kernel.model.role.RoleConstants;
 import com.liferay.portal.kernel.util.ArrayUtil;
 import com.liferay.portal.kernel.util.Portal;
 import com.liferay.portal.kernel.util.PropsValues;
-import com.liferay.portal.security.fips.util.FIPSUtil;
 import com.liferay.roles.admin.role.type.contributor.RoleTypeContributor;
 
 import java.util.Locale;
@@ -79,7 +78,7 @@ public class RegularRoleTypeContributor implements RoleTypeContributor {
 
 	@Override
 	public boolean isAllowDelete(Role role) {
-		if ((role == null) || FIPSUtil.isCryptoOfficerRole(role.getName())) {
+		if ((role == null) || RoleConstants.isUnmodifiable(role.getName())) {
 			return false;
 		}
 
