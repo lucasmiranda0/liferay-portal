@@ -7,7 +7,9 @@ package com.liferay.users.admin.web.internal.portlet.action;
 
 import com.liferay.petra.string.StringPool;
 import com.liferay.portal.kernel.exception.ContactNameException;
+import com.liferay.portal.kernel.exception.ModelListenerException;
 import com.liferay.portal.kernel.exception.NoSuchUserException;
+import com.liferay.portal.kernel.exception.PortalException;
 import com.liferay.portal.kernel.exception.RequiredRoleException;
 import com.liferay.portal.kernel.exception.RoleAssignmentException;
 import com.liferay.portal.kernel.exception.UserEmailAddressException;
@@ -40,7 +42,6 @@ import com.liferay.portal.kernel.util.JavaConstants;
 import com.liferay.portal.kernel.util.ParamUtil;
 import com.liferay.portal.kernel.util.Portal;
 import com.liferay.portal.kernel.util.Validator;
-import com.liferay.portal.security.fips.util.FIPSUtil;
 import com.liferay.portlet.usersadmin.util.UsersAdminUtil;
 import com.liferay.users.admin.constants.UsersAdminPortletKeys;
 
@@ -144,22 +145,30 @@ public class UpdateUserRolesMVCActionCommand extends BaseMVCActionCommand {
 			}
 		}
 		catch (Exception exception) {
-			if (exception instanceof ContactNameException ||
-				exception instanceof NoSuchUserException ||
-				exception instanceof PrincipalException ||
-				exception instanceof
-					RequiredRoleException.MustNotRemoveLastAdministator ||
-				exception instanceof RoleAssignmentException ||
-				exception instanceof UserEmailAddressException ||
-				exception instanceof UserScreenNameException) {
+			Throwable throwable = exception;
 
-				SessionErrors.add(actionRequest, exception.getClass());
+			if ((exception instanceof ModelListenerException) &&
+				(exception.getCause() instanceof PortalException)) {
+
+				throwable = exception.getCause();
+			}
+
+			if (throwable instanceof ContactNameException ||
+				throwable instanceof NoSuchUserException ||
+				throwable instanceof PrincipalException ||
+				throwable instanceof
+					RequiredRoleException.MustNotRemoveLastAdministator ||
+				throwable instanceof RoleAssignmentException ||
+				throwable instanceof UserEmailAddressException ||
+				throwable instanceof UserScreenNameException) {
+
+				SessionErrors.add(actionRequest, throwable.getClass());
 
 				actionResponse.setRenderParameter("mvcPath", "/error.jsp");
 			}
-			else if (exception instanceof MembershipPolicyException) {
+			else if (throwable instanceof MembershipPolicyException) {
 				SessionErrors.add(
-					actionRequest, exception.getClass(), exception);
+					actionRequest, throwable.getClass(), throwable);
 
 				actionResponse.setRenderParameter("mvcPath", "/edit_user.jsp");
 			}
@@ -252,9 +261,6 @@ public class UpdateUserRolesMVCActionCommand extends BaseMVCActionCommand {
 
 			throw new RequiredRoleException.MustNotRemoveLastAdministator();
 		}
-
-		FIPSUtil.checkCryptoOfficerRole(
-			administratorRole.getRoleId(), user.getCompanyId(), roleIds);
 	}
 
 	@Reference
