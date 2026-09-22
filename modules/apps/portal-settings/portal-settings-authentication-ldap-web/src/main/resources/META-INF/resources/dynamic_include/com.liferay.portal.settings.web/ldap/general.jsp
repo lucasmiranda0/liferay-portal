@@ -32,19 +32,34 @@ LDAPAuthConfiguration ldapAuthConfiguration = ldapAuthConfigurationProvider.getC
 	</aui:select>
 
 	<aui:select label="password-encryption-algorithm" name='<%= "ldap--" + LDAPConstants.PASSWORD_ENCRYPTION_ALGORITHM + "--" %>' value="<%= ldapAuthConfiguration.passwordEncryptionAlgorithm() %>">
-		<c:if test="<%= !PropsValues.FIPS_ENABLED %>">
+		<c:if test="<%= !FIPSModeValidator.isNotAllowedAlgorithm(LDAPSettingsConstants.BCRYPT) %>">
 			<aui:option label="bcrypt" value="<%= LDAPSettingsConstants.BCRYPT %>" />
+		</c:if>
+
+		<c:if test="<%= !FIPSModeValidator.isNotAllowedAlgorithm(LDAPSettingsConstants.MD2) %>">
 			<aui:option label="md2" value="<%= LDAPSettingsConstants.MD2 %>" />
+		</c:if>
+
+		<c:if test="<%= !FIPSModeValidator.isNotAllowedAlgorithm(LDAPSettingsConstants.MD5) %>">
 			<aui:option label="md5" value="<%= LDAPSettingsConstants.MD5 %>" />
+		</c:if>
+
+		<c:if test="<%= !FIPSModeValidator.isNotAllowedAlgorithm(LDAPSettingsConstants.NONE) %>">
 			<aui:option label="none" value="<%= LDAPSettingsConstants.NONE %>" />
+		</c:if>
+
+		<c:if test="<%= !FIPSModeValidator.isNotAllowedAlgorithm(LDAPSettingsConstants.SHA) %>">
 			<aui:option label="sha" value="<%= LDAPSettingsConstants.SHA %>" />
 		</c:if>
 
 		<aui:option label="sha-256" value="<%= LDAPSettingsConstants.SHA_256 %>" />
 		<aui:option label="sha-384" value="<%= LDAPSettingsConstants.SHA_384 %>" />
 
-		<c:if test="<%= !PropsValues.FIPS_ENABLED %>">
+		<c:if test="<%= !FIPSModeValidator.isNotAllowedAlgorithm(LDAPSettingsConstants.SSHA) %>">
 			<aui:option label="ssha" value="<%= LDAPSettingsConstants.SSHA %>" />
+		</c:if>
+
+		<c:if test="<%= !FIPSModeValidator.isNotAllowedAlgorithm(LDAPSettingsConstants.UFC_CRYPT) %>">
 			<aui:option label="ufc-crypt" value="<%= LDAPSettingsConstants.UFC_CRYPT %>" />
 		</c:if>
 	</aui:select>
