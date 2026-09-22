@@ -5,12 +5,14 @@
 
 package com.liferay.portal.security.fips.constants;
 
+import com.liferay.portal.kernel.model.PasswordPolicyConstants;
+
 /**
  * @author Manuele Castro
  */
 public class FIPSConstants {
 
 	public static final String PASSWORD_POLICY_NAME_CRYPTO_OFFICER =
-		"Crypto Officer Password Policy";
+		PasswordPolicyConstants.CRYPTO_OFFICER_PASSWORD_POLICY;
 
 }

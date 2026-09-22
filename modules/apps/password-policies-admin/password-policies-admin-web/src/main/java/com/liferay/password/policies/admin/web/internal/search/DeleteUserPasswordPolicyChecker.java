@@ -11,8 +11,9 @@ import com.liferay.portal.kernel.log.LogFactoryUtil;
 import com.liferay.portal.kernel.model.PasswordPolicy;
 import com.liferay.portal.kernel.model.PasswordPolicyRel;
 import com.liferay.portal.kernel.model.User;
+import com.liferay.portal.kernel.model.role.RoleConstants;
 import com.liferay.portal.kernel.service.PasswordPolicyRelLocalServiceUtil;
-import com.liferay.portal.security.fips.util.FIPSUtil;
+import com.liferay.portal.kernel.service.RoleLocalServiceUtil;
 
 import jakarta.portlet.RenderResponse;
 
@@ -33,11 +34,14 @@ public class DeleteUserPasswordPolicyChecker extends EmptyOnClickRowChecker {
 	public boolean isDisabled(Object object) {
 		User user = (User)object;
 
-		if (FIPSUtil.hasCryptoOfficerRole(user)) {
-			return true;
-		}
-
 		try {
+			if (RoleLocalServiceUtil.hasUserRole(
+					user.getUserId(), user.getCompanyId(),
+					RoleConstants.CRYPTO_OFFICER, false)) {
+
+				return true;
+			}
+
 			PasswordPolicyRel passwordPolicyRel =
 				PasswordPolicyRelLocalServiceUtil.fetchPasswordPolicyRel(
 					User.class.getName(), user.getUserId());

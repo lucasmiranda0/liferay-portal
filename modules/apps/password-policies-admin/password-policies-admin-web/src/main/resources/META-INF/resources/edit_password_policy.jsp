@@ -18,7 +18,7 @@ if (passwordPolicy == null) {
 	passwordPolicy.setNew(true);
 }
 
-boolean cryptoOfficerPasswordPolicy = FIPSUtil.isCryptoOfficerPasswordPolicy(passwordPolicy.getName());
+boolean cryptoOfficerPasswordPolicy = PasswordPolicyConstants.isUnmodifiable(passwordPolicy.getName());
 boolean defaultPolicy = BeanParamUtil.getBoolean(passwordPolicy, request, "defaultPolicy");
 
 PasswordPoliciesConfiguration passwordPoliciesConfiguration = (PasswordPoliciesConfiguration)request.getAttribute(PasswordPoliciesConfiguration.class.getName());

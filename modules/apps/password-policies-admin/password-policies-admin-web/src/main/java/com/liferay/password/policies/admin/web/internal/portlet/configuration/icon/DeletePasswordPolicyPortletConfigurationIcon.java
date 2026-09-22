@@ -8,6 +8,7 @@ package com.liferay.password.policies.admin.web.internal.portlet.configuration.i
 import com.liferay.password.policies.admin.constants.PasswordPoliciesAdminPortletKeys;
 import com.liferay.portal.kernel.language.Language;
 import com.liferay.portal.kernel.model.PasswordPolicy;
+import com.liferay.portal.kernel.model.PasswordPolicyConstants;
 import com.liferay.portal.kernel.portlet.configuration.icon.BaseJSPPortletConfigurationIcon;
 import com.liferay.portal.kernel.portlet.configuration.icon.PortletConfigurationIcon;
 import com.liferay.portal.kernel.security.permission.ActionKeys;
@@ -17,7 +18,6 @@ import com.liferay.portal.kernel.util.HashMapBuilder;
 import com.liferay.portal.kernel.util.ParamUtil;
 import com.liferay.portal.kernel.util.Portal;
 import com.liferay.portal.kernel.util.WebKeys;
-import com.liferay.portal.security.fips.util.FIPSUtil;
 import com.liferay.portal.service.permission.PasswordPolicyPermissionUtil;
 
 import jakarta.portlet.PortletRequest;
@@ -81,7 +81,7 @@ public class DeletePasswordPolicyPortletConfigurationIcon
 			PasswordPolicyPermissionUtil.contains(
 				themeDisplay.getPermissionChecker(), passwordPolicyId,
 				ActionKeys.DELETE) &&
-			!FIPSUtil.isCryptoOfficerPasswordPolicy(passwordPolicy.getName())) {
+			!PasswordPolicyConstants.isUnmodifiable(passwordPolicy.getName())) {
 
 			return true;
 		}
