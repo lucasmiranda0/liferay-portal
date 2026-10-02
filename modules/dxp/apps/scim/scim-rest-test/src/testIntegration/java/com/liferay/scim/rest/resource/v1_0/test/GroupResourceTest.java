@@ -47,6 +47,7 @@ import com.liferay.scim.rest.client.resource.v1_0.UserResource;
 import com.liferay.scim.rest.resource.v1_0.test.util.ScimTestUtil;
 
 import java.util.Arrays;
+import java.util.Objects;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -380,6 +381,24 @@ public class GroupResourceTest extends BaseGroupResourceTestCase {
 		patchGroup = _patchGroup(patchOp, userGroup.getUserGroupId());
 
 		Assert.assertEquals(2, ArrayUtil.getLength(patchGroup.getMembers()));
+
+		for (MultiValuedAttribute memberMultiValuedAttribute :
+				patchGroup.getMembers()) {
+
+			if (!Objects.equals(
+					memberMultiValuedAttribute.getValue(), user2.getId())) {
+
+				continue;
+			}
+
+			Meta meta = user2.getMeta();
+
+			Assert.assertEquals(
+				meta.getLocation(), memberMultiValuedAttribute.get$ref());
+
+			Assert.assertEquals(
+				user2.getUserName(), memberMultiValuedAttribute.getDisplay());
+		}
 
 		User user3 = _addUser();
 
