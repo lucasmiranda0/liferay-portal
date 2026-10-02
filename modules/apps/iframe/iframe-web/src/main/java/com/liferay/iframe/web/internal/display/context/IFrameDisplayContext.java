@@ -57,6 +57,12 @@ public class IFrameDisplayContext {
 		return _authType;
 	}
 
+	public String getBasicPassword() {
+		return SecretResolverUtil.resolve(
+			_themeDisplay.getCompanyId(),
+			_iFramePortletInstanceConfiguration.basicPassword());
+	}
+
 	public String getFormMethod() {
 		if (_formMethod != null) {
 			return _formMethod;
