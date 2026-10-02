@@ -20,6 +20,7 @@ import com.liferay.portal.kernel.util.PropsKeys;
 import com.liferay.portal.kernel.util.PropsUtil;
 import com.liferay.portal.kernel.util.StringUtil;
 import com.liferay.portal.kernel.util.Validator;
+import com.liferay.portal.security.key.secret.SecretResolverUtil;
 import com.liferay.saml.runtime.configuration.SamlConfiguration;
 import com.liferay.saml.runtime.configuration.SamlProviderConfiguration;
 
@@ -148,8 +149,9 @@ public class SamlConfigurationUpgradeProcess extends UpgradeProcess {
 					entityId,
 					GetterUtil.getString(properties.get("saml.entity.id")))) {
 
-				password = GetterUtil.getString(
-					properties.get(passwordPropertyKey));
+				password = SecretResolverUtil.resolve(
+					GetterUtil.getLong(properties.get("companyId")),
+					GetterUtil.getString(properties.get(passwordPropertyKey)));
 
 				break;
 			}
@@ -168,7 +170,8 @@ public class SamlConfigurationUpgradeProcess extends UpgradeProcess {
 			_configurationProvider.getSystemConfiguration(
 				SamlConfiguration.class);
 
-		String keyStorePassword = samlConfiguration.keyStorePassword();
+		String keyStorePassword = SecretResolverUtil.resolve(
+			CompanyConstants.SYSTEM, samlConfiguration.keyStorePassword());
 
 		if (Validator.isNull(keyStorePassword)) {
 			return new char[0];
