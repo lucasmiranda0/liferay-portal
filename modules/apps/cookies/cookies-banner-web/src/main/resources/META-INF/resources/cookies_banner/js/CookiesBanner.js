@@ -60,6 +60,16 @@ export default function ({
 		return;
 	}
 
+	const resizeObserver = new ResizeObserver(() => {
+		const height = cookieBanner.offsetHeight;
+
+		document.documentElement.style.scrollPaddingBottom = height
+			? `${height}px`
+			: '';
+	});
+
+	resizeObserver.observe(cookieBanner);
+
 	const editMode = document.body.classList.contains('has-edit-mode-menu');
 
 	if (!editMode) {
