@@ -679,6 +679,27 @@ inst_group=${user.group}
 		<echo file="prepare-generated-files.tstamp">${prepare-generated-files.tstamp}</echo>
 	</target>
 
+	<target name="setup-fedramp-profile">
+		<if>
+			<not>
+				<resourcecontains
+					resource="${app.server.tomcat.dir}/bin/setenv.sh"
+					substring="FEDRAMP_MODE"
+				/>
+			</not>
+			<then>
+				<echo append="true" file="${app.server.tomcat.dir}/bin/setenv.sh">
+					<![CDATA[
+if [ "$FEDRAMP_MODE" = "true" ]
+then
+	export LIFERAY_CONFIGURATION_PERIOD_OVERRIDE_PERIOD_COM_PERIOD_LIFERAY_PERIOD_PORTAL_PERIOD_SECURITY_PERIOD_AUDIT_PERIOD_ROUTER_PERIOD_CONFIGURATION_PERIOD__UPPERCASEL_OGGING_UPPERCASEA_UDIT_UPPERCASEM_ESSAGE_UPPERCASEP_ROCESSOR_UPPERCASEC_ONFIGURATION_UNDERLINE_ENABLED='B"true"'
+	export LIFERAY_CONFIGURATION_PERIOD_OVERRIDE_PERIOD_COM_PERIOD_LIFERAY_PERIOD_PORTAL_PERIOD_SECURITY_PERIOD_AUDIT_PERIOD_ROUTER_PERIOD_CONFIGURATION_PERIOD__UPPERCASEL_OGGING_UPPERCASEA_UDIT_UPPERCASEM_ESSAGE_UPPERCASEP_ROCESSOR_UPPERCASEC_ONFIGURATION_UNDERLINE_LOG_UPPERCASEM_ESSAGE_UPPERCASEF_ORMAT='"JSON"'
+fi]]>
+				</echo>
+			</then>
+		</if>
+	</target>
+
 	<target name="unzip-glowroot">
 		<delete dir="${app.server.parent.dir}/glowroot" />
 
@@ -1067,6 +1088,8 @@ org.apache.level=WARNING]]>
 		</chmod>
 
 		<antcall target="unzip-glowroot" />
+
+		<antcall target="setup-fedramp-profile" />
 	</target>
 
 	<target name="unzip-weblogic">
