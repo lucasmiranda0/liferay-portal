@@ -81,16 +81,17 @@ public class MultiValueServiceTrackerBucketFactory<SR, TS>
 		}
 
 		private void _rebuild() {
-			_services = new ArrayList<>(_serviceReferenceServiceTuples.size());
+			List<TS> services = new ArrayList<>(
+				_serviceReferenceServiceTuples.size());
 
 			for (ServiceReferenceServiceTuple<SR, TS>
 					serviceReferenceServiceTuple :
 						_serviceReferenceServiceTuples) {
 
-				_services.add(serviceReferenceServiceTuple.getService());
+				services.add(serviceReferenceServiceTuple.getService());
 			}
 
-			_services = Collections.unmodifiableList(_services);
+			_services = Collections.unmodifiableList(services);
 		}
 
 		private final ServiceReferenceServiceTupleComparator<SR>
@@ -98,7 +99,7 @@ public class MultiValueServiceTrackerBucketFactory<SR, TS>
 				new ServiceReferenceServiceTupleComparator<>(_comparator);
 		private final List<ServiceReferenceServiceTuple<SR, TS>>
 			_serviceReferenceServiceTuples = new ArrayList<>();
-		private List<TS> _services = new ArrayList<>();
+		private volatile List<TS> _services = new ArrayList<>();
 
 	}
 
