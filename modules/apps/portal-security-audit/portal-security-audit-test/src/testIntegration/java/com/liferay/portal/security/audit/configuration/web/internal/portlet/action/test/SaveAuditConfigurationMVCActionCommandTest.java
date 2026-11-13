@@ -12,6 +12,7 @@ import com.liferay.layout.test.util.LayoutTestUtil;
 import com.liferay.portal.configuration.metatype.annotations.ExtendedObjectClassDefinition;
 import com.liferay.portal.configuration.module.configuration.ConfigurationProvider;
 import com.liferay.portal.configuration.persistence.ConfigurationOverridePropertiesUtil;
+import com.liferay.portal.configuration.test.util.ConfigurationTemporarySwapper;
 import com.liferay.portal.kernel.audit.AuditMessage;
 import com.liferay.portal.kernel.json.JSONArray;
 import com.liferay.portal.kernel.json.JSONObject;
@@ -48,6 +49,8 @@ import com.liferay.portal.kernel.util.WebKeys;
 import com.liferay.portal.security.audit.AuditMessageProcessor;
 import com.liferay.portal.security.audit.configuration.AuditConfiguration;
 import com.liferay.portal.security.audit.router.configuration.FileSystemAuditMessageProcessorConfiguration;
+import com.liferay.portal.security.audit.router.configuration.PersistentAuditMessageProcessorCompanyConfiguration;
+import com.liferay.portal.security.audit.router.configuration.PersistentAuditMessageProcessorConfiguration;
 import com.liferay.portal.test.rule.FeatureFlag;
 import com.liferay.portal.test.rule.Inject;
 import com.liferay.portal.test.rule.LiferayIntegrationTestRule;
@@ -105,6 +108,9 @@ public class SaveAuditConfigurationMVCActionCommandTest {
 		_configurationProvider.deleteCompanyConfiguration(
 			FileSystemAuditMessageProcessorConfiguration.class,
 			TestPropsValues.getCompanyId());
+		_configurationProvider.deleteCompanyConfiguration(
+			PersistentAuditMessageProcessorCompanyConfiguration.class,
+			TestPropsValues.getCompanyId());
 		_configurationProvider.deleteSystemConfiguration(
 			AuditConfiguration.class);
 		_configurationProvider.deleteSystemConfiguration(
@@ -136,6 +142,15 @@ public class SaveAuditConfigurationMVCActionCommandTest {
 			_configurationProvider.getCompanyConfiguration(
 				FileSystemAuditMessageProcessorConfiguration.class,
 				TestPropsValues.getCompanyId()));
+
+		PersistentAuditMessageProcessorCompanyConfiguration
+			persistentAuditMessageProcessorCompanyConfiguration =
+				_configurationProvider.getCompanyConfiguration(
+					PersistentAuditMessageProcessorCompanyConfiguration.class,
+					TestPropsValues.getCompanyId());
+
+		Assert.assertFalse(
+			persistentAuditMessageProcessorCompanyConfiguration.enabled());
 	}
 
 	@FeatureFlag("LPD-6417")
@@ -161,6 +176,15 @@ public class SaveAuditConfigurationMVCActionCommandTest {
 		Assert.assertEquals(
 			"NDJSON",
 			fileSystemAuditMessageProcessorConfiguration.outputFormat());
+
+		PersistentAuditMessageProcessorCompanyConfiguration
+			persistentAuditMessageProcessorCompanyConfiguration =
+				_configurationProvider.getCompanyConfiguration(
+					PersistentAuditMessageProcessorCompanyConfiguration.class,
+					RandomTestUtil.randomLong());
+
+		Assert.assertTrue(
+			persistentAuditMessageProcessorCompanyConfiguration.enabled());
 	}
 
 	@FeatureFlag(enable = false, value = "LPD-6417")
@@ -207,6 +231,32 @@ public class SaveAuditConfigurationMVCActionCommandTest {
 			_configurationProvider.getCompanyConfiguration(
 				FileSystemAuditMessageProcessorConfiguration.class,
 				TestPropsValues.getCompanyId()));
+	}
+
+	@FeatureFlag("LPD-6417")
+	@Test
+	public void testProcessActionWithCompanyScopeWhenPersistentAuditMessageProcessorIsDisabled()
+		throws Exception {
+
+		try (ConfigurationTemporarySwapper configurationTemporarySwapper =
+				new ConfigurationTemporarySwapper(
+					PersistentAuditMessageProcessorConfiguration.class.
+						getName(),
+					HashMapDictionaryBuilder.<String, Object>put(
+						"enabled", false
+					).build())) {
+
+			_processAction(ExtendedObjectClassDefinition.Scope.COMPANY);
+		}
+
+		PersistentAuditMessageProcessorCompanyConfiguration
+			persistentAuditMessageProcessorCompanyConfiguration =
+				_configurationProvider.getCompanyConfiguration(
+					PersistentAuditMessageProcessorCompanyConfiguration.class,
+					TestPropsValues.getCompanyId());
+
+		Assert.assertTrue(
+			persistentAuditMessageProcessorCompanyConfiguration.enabled());
 	}
 
 	@FeatureFlag("LPD-6417")
@@ -475,6 +525,8 @@ public class SaveAuditConfigurationMVCActionCommandTest {
 			_createMockLiferayPortletActionRequest(scope);
 
 		mockLiferayPortletActionRequest.setParameter("enabled", "false");
+		mockLiferayPortletActionRequest.setParameter(
+			"persistentAuditMessageProcessorEnabled", "false");
 		mockLiferayPortletActionRequest.setParameter(
 			"pseudonymizationEnabled", "false");
 

@@ -11,6 +11,8 @@ import com.liferay.portal.kernel.test.util.RandomTestUtil;
 import com.liferay.portal.kernel.util.HashMapBuilder;
 import com.liferay.portal.security.audit.configuration.AuditConfiguration;
 import com.liferay.portal.security.audit.router.configuration.FileSystemAuditMessageProcessorConfiguration;
+import com.liferay.portal.security.audit.router.configuration.PersistentAuditMessageProcessorCompanyConfiguration;
+import com.liferay.portal.security.audit.router.configuration.PersistentAuditMessageProcessorConfiguration;
 import com.liferay.portal.test.rule.LiferayUnitTestRule;
 
 import java.util.function.Function;
@@ -61,6 +63,17 @@ public class AuditConfigurationDisplayContextTest {
 			AuditConfigurationDisplayContext::
 				getPseudonymizationEnabledHelpMessage,
 			AuditConfiguration.class, "pseudonymizationEnabled");
+
+		Assert.assertEquals(
+			StringPool.BLANK,
+			_createDisplayContext(
+				true
+			).getPersistentAuditMessageProcessorEnabledHelpMessage());
+		Assert.assertEquals(
+			"the-database-processor-is-disabled-in-system-settings",
+			_createDisplayContext(
+				false
+			).getPersistentAuditMessageProcessorEnabledHelpMessage());
 	}
 
 	@Test
@@ -96,7 +109,31 @@ public class AuditConfigurationDisplayContextTest {
 		return new AuditConfigurationDisplayContext(
 			Mockito.mock(AuditConfiguration.class),
 			Mockito.mock(FileSystemAuditMessageProcessorConfiguration.class),
+			Mockito.mock(
+				PersistentAuditMessageProcessorCompanyConfiguration.class),
+			Mockito.mock(PersistentAuditMessageProcessorConfiguration.class),
 			false);
+	}
+
+	private AuditConfigurationDisplayContext _createDisplayContext(
+		boolean persistentAuditMessageProcessorEnabled) {
+
+		PersistentAuditMessageProcessorConfiguration
+			persistentAuditMessageProcessorConfiguration = Mockito.mock(
+				PersistentAuditMessageProcessorConfiguration.class);
+
+		Mockito.when(
+			persistentAuditMessageProcessorConfiguration.enabled()
+		).thenReturn(
+			persistentAuditMessageProcessorEnabled
+		);
+
+		return new AuditConfigurationDisplayContext(
+			Mockito.mock(AuditConfiguration.class),
+			Mockito.mock(FileSystemAuditMessageProcessorConfiguration.class),
+			Mockito.mock(
+				PersistentAuditMessageProcessorCompanyConfiguration.class),
+			persistentAuditMessageProcessorConfiguration, false);
 	}
 
 	private void _mockOverrideProperties(

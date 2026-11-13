@@ -9,12 +9,14 @@ import com.liferay.arquillian.extension.junit.bridge.junit.Arquillian;
 import com.liferay.petra.lang.SafeCloseable;
 import com.liferay.petra.string.StringPool;
 import com.liferay.portal.configuration.test.util.ConfigurationTemporarySwapper;
+import com.liferay.portal.configuration.test.util.ConfigurationTestUtil;
 import com.liferay.portal.kernel.audit.AuditMessage;
 import com.liferay.portal.kernel.audit.AuditRequestContext;
 import com.liferay.portal.kernel.audit.AuditRequestContextThreadLocal;
 import com.liferay.portal.kernel.audit.AuditRouter;
 import com.liferay.portal.kernel.json.JSONFactoryUtil;
 import com.liferay.portal.kernel.json.JSONUtil;
+import com.liferay.portal.kernel.model.Company;
 import com.liferay.portal.kernel.model.Role;
 import com.liferay.portal.kernel.model.User;
 import com.liferay.portal.kernel.model.role.RoleConstants;
@@ -25,6 +27,7 @@ import com.liferay.portal.kernel.servlet.HttpHeaders;
 import com.liferay.portal.kernel.servlet.filters.invoker.InvokerFilterChain;
 import com.liferay.portal.kernel.test.rule.AggregateTestRule;
 import com.liferay.portal.kernel.test.rule.DeleteAfterTestRun;
+import com.liferay.portal.kernel.test.util.CompanyTestUtil;
 import com.liferay.portal.kernel.test.util.RandomTestUtil;
 import com.liferay.portal.kernel.test.util.RoleTestUtil;
 import com.liferay.portal.kernel.test.util.TestPropsValues;
@@ -69,6 +72,7 @@ public class PersistentAuditMessageProcessorTest {
 		_testProcessHttpRequestContext();
 		_testProcessRequestContextPersistsAfterClear();
 		_testProcessRolesPersistAfterRoleChanges();
+		_testProcessWithCompanyConfiguration();
 	}
 
 	private AuditEvent _addAuditEvent(
@@ -323,6 +327,73 @@ public class PersistentAuditMessageProcessorTest {
 		}
 	}
 
+	private void _testProcessWithCompanyConfiguration() throws Exception {
+		_company = CompanyTestUtil.addCompany();
+
+		String factoryPid =
+			"com.liferay.portal.security.audit.router.configuration." +
+				"PersistentAuditMessageProcessorCompanyConfiguration.scoped";
+
+		String pid = ConfigurationTestUtil.createFactoryConfiguration(
+			factoryPid,
+			HashMapDictionaryBuilder.<String, Object>put(
+				"companyId", _company.getCompanyId()
+			).put(
+				"enabled", false
+			).build());
+
+		try (ConfigurationTemporarySwapper configurationTemporarySwapper =
+				new ConfigurationTemporarySwapper(
+					PersistentAuditMessageProcessorConfiguration.class.
+						getName(),
+					HashMapDictionaryBuilder.<String, Object>put(
+						"bufferSize", 1
+					).build())) {
+
+			String eventType = _createEventType();
+
+			_route(_company.getCompanyId(), eventType);
+			_route(TestPropsValues.getCompanyId(), eventType);
+
+			Assert.assertEquals(
+				0, _getAuditEventsCount(_company.getCompanyId(), eventType));
+			Assert.assertEquals(
+				1,
+				_getAuditEventsCount(
+					TestPropsValues.getCompanyId(), eventType));
+
+			ConfigurationTestUtil.deleteFactoryConfiguration(pid, factoryPid);
+
+			_route(_company.getCompanyId(), eventType);
+
+			Assert.assertEquals(
+				1, _getAuditEventsCount(_company.getCompanyId(), eventType));
+		}
+
+		try (ConfigurationTemporarySwapper configurationTemporarySwapper =
+				new ConfigurationTemporarySwapper(
+					PersistentAuditMessageProcessorConfiguration.class.
+						getName(),
+					HashMapDictionaryBuilder.<String, Object>put(
+						"bufferSize", 1
+					).put(
+						"enabled", false
+					).build())) {
+
+			String eventType = _createEventType();
+
+			_route(_company.getCompanyId(), eventType);
+			_route(TestPropsValues.getCompanyId(), eventType);
+
+			Assert.assertEquals(
+				0, _getAuditEventsCount(_company.getCompanyId(), eventType));
+			Assert.assertEquals(
+				0,
+				_getAuditEventsCount(
+					TestPropsValues.getCompanyId(), eventType));
+		}
+	}
+
 	private static final long _FLUSH_INTERVAL = 86400000;
 
 	@Inject
@@ -333,6 +404,9 @@ public class PersistentAuditMessageProcessorTest {
 
 	@Inject
 	private AuditRouter _auditRouter;
+
+	@DeleteAfterTestRun
+	private Company _company;
 
 	@Inject
 	private RoleLocalService _roleLocalService;
