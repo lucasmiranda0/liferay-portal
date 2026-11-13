@@ -14,9 +14,11 @@ import com.liferay.portal.kernel.util.BatchProcessor;
 import com.liferay.portal.security.audit.AuditEventManager;
 import com.liferay.portal.security.audit.AuditMessageProcessor;
 import com.liferay.portal.security.audit.router.configuration.PersistentAuditMessageProcessorConfiguration;
+import com.liferay.portal.security.audit.router.internal.configuration.admin.service.PersistentAuditMessageProcessorCompanyManagedServiceFactory;
 
 import java.util.Map;
 
+import org.osgi.service.cm.ManagedServiceFactory;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Deactivate;
@@ -64,7 +66,15 @@ public class PersistentAuditMessageProcessor implements AuditMessageProcessor {
 			persistentAuditMessageProcessorConfiguration =
 				_persistentAuditMessageProcessorConfiguration;
 
-		if (!persistentAuditMessageProcessorConfiguration.enabled()) {
+		PersistentAuditMessageProcessorCompanyManagedServiceFactory
+			persistentAuditMessageProcessorCompanyManagedServiceFactory =
+				(PersistentAuditMessageProcessorCompanyManagedServiceFactory)
+					_managedServiceFactory;
+
+		if (!persistentAuditMessageProcessorConfiguration.enabled() ||
+			!persistentAuditMessageProcessorCompanyManagedServiceFactory.
+				isEnabled(auditMessage.getCompanyId())) {
+
 			return;
 		}
 
@@ -107,6 +117,12 @@ public class PersistentAuditMessageProcessor implements AuditMessageProcessor {
 	private AuditEventManager _auditEventManager;
 
 	private volatile BatchProcessor<AuditMessage> _batchProcessor;
+
+	@Reference(
+		target = "(component.name=com.liferay.portal.security.audit.router.internal.configuration.admin.service.PersistentAuditMessageProcessorCompanyManagedServiceFactory)"
+	)
+	private ManagedServiceFactory _managedServiceFactory;
+
 	private volatile PersistentAuditMessageProcessorConfiguration
 		_persistentAuditMessageProcessorConfiguration;
 
