@@ -17,6 +17,12 @@ AuditConfigurationDisplayContext auditConfigurationDisplayContext = (AuditConfig
 
 <aui:input disabled="<%= auditConfigurationDisplayContext.isPseudonymizationEnabledOverridden() %>" helpMessage="<%= auditConfigurationDisplayContext.getPseudonymizationEnabledHelpMessage() %>" label="pseudonymization-enabled" name="pseudonymizationEnabled" type="checkbox" value="<%= auditConfigurationDisplayContext.isPseudonymizationEnabled() %>" />
 
+<c:if test="<%= !auditConfigurationDisplayContext.isSystemScope() %>">
+	<h3 class="sheet-subtitle"><liferay-ui:message key="database-processor" /></h3>
+
+	<aui:input disabled="<%= auditConfigurationDisplayContext.isPersistentAuditMessageProcessorSystemDisabled() %>" helpMessage="<%= auditConfigurationDisplayContext.getPersistentAuditMessageProcessorEnabledHelpMessage() %>" label="enable-database-processor" name="persistentAuditMessageProcessorEnabled" type="checkbox" value="<%= auditConfigurationDisplayContext.isPersistentAuditMessageProcessorEnabled() %>" />
+</c:if>
+
 <h3 class="sheet-subtitle"><liferay-ui:message key="file-system-processor" /></h3>
 
 <aui:input disabled="<%= auditConfigurationDisplayContext.isFileSystemAuditMessageProcessorEnabledOverridden() %>" helpMessage="<%= auditConfigurationDisplayContext.getFileSystemAuditMessageProcessorEnabledHelpMessage() %>" label="enable-file-system-processor" name="fileSystemAuditMessageProcessorEnabled" type="checkbox" value="<%= auditConfigurationDisplayContext.isFileSystemAuditMessageProcessorEnabled() %>" />

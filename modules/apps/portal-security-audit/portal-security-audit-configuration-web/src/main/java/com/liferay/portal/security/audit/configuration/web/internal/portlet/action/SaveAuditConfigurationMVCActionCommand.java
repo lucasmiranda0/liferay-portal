@@ -31,6 +31,8 @@ import com.liferay.portal.kernel.util.WebKeys;
 import com.liferay.portal.security.audit.configuration.AuditConfiguration;
 import com.liferay.portal.security.audit.configuration.web.internal.util.AuditConfigurationOverrideUtil;
 import com.liferay.portal.security.audit.router.configuration.FileSystemAuditMessageProcessorConfiguration;
+import com.liferay.portal.security.audit.router.configuration.PersistentAuditMessageProcessorCompanyConfiguration;
+import com.liferay.portal.security.audit.router.configuration.PersistentAuditMessageProcessorConfiguration;
 
 import jakarta.portlet.ActionRequest;
 import jakarta.portlet.ActionResponse;
@@ -137,6 +139,32 @@ public class SaveAuditConfigurationMVCActionCommand
 			_routePseudonymizationChangeAuditMessage(
 				actionRequest, auditConfiguration.pseudonymizationEnabled(),
 				themeDisplay);
+
+			PersistentAuditMessageProcessorConfiguration
+				persistentAuditMessageProcessorConfiguration =
+					_configurationProvider.getSystemConfiguration(
+						PersistentAuditMessageProcessorConfiguration.class);
+
+			if (persistentAuditMessageProcessorConfiguration.enabled()) {
+				PersistentAuditMessageProcessorCompanyConfiguration
+					persistentAuditMessageProcessorCompanyConfiguration =
+						_configurationProvider.getCompanyConfiguration(
+							PersistentAuditMessageProcessorCompanyConfiguration.
+								class,
+							companyId);
+
+				_configurationProvider.saveCompanyConfiguration(
+					PersistentAuditMessageProcessorCompanyConfiguration.class,
+					companyId,
+					HashMapDictionaryBuilder.<String, Object>put(
+						"enabled",
+						ParamUtil.getBoolean(
+							actionRequest,
+							"persistentAuditMessageProcessorEnabled",
+							persistentAuditMessageProcessorCompanyConfiguration.
+								enabled())
+					).build());
+			}
 
 			Dictionary<String, Object>
 				fileSystemAuditMessageProcessorConfigurationProperties =

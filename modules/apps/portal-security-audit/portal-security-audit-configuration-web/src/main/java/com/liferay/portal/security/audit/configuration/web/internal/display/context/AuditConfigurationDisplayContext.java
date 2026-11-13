@@ -5,9 +5,12 @@
 
 package com.liferay.portal.security.audit.configuration.web.internal.display.context;
 
+import com.liferay.petra.string.StringPool;
 import com.liferay.portal.security.audit.configuration.AuditConfiguration;
 import com.liferay.portal.security.audit.configuration.web.internal.util.AuditConfigurationOverrideUtil;
 import com.liferay.portal.security.audit.router.configuration.FileSystemAuditMessageProcessorConfiguration;
+import com.liferay.portal.security.audit.router.configuration.PersistentAuditMessageProcessorCompanyConfiguration;
+import com.liferay.portal.security.audit.router.configuration.PersistentAuditMessageProcessorConfiguration;
 
 /**
  * @author Christian Moura
@@ -18,11 +21,19 @@ public class AuditConfigurationDisplayContext {
 		AuditConfiguration auditConfiguration,
 		FileSystemAuditMessageProcessorConfiguration
 			fileSystemAuditMessageProcessorConfiguration,
+		PersistentAuditMessageProcessorCompanyConfiguration
+			persistentAuditMessageProcessorCompanyConfiguration,
+		PersistentAuditMessageProcessorConfiguration
+			persistentAuditMessageProcessorConfiguration,
 		boolean systemScope) {
 
 		_auditConfiguration = auditConfiguration;
 		_fileSystemAuditMessageProcessorConfiguration =
 			fileSystemAuditMessageProcessorConfiguration;
+		_persistentAuditMessageProcessorCompanyConfiguration =
+			persistentAuditMessageProcessorCompanyConfiguration;
+		_persistentAuditMessageProcessorConfiguration =
+			persistentAuditMessageProcessorConfiguration;
 		_systemScope = systemScope;
 	}
 
@@ -62,6 +73,14 @@ public class AuditConfigurationDisplayContext {
 	public String getFileSystemAuditMessageProcessorOutputFormatHelpMessage() {
 		return _getHelpMessage(
 			FileSystemAuditMessageProcessorConfiguration.class, "outputFormat");
+	}
+
+	public String getPersistentAuditMessageProcessorEnabledHelpMessage() {
+		if (isPersistentAuditMessageProcessorSystemDisabled()) {
+			return "the-database-processor-is-disabled-in-system-settings";
+		}
+
+		return StringPool.BLANK;
 	}
 
 	public String getPseudonymizationEnabledHelpMessage() {
@@ -111,6 +130,14 @@ public class AuditConfigurationDisplayContext {
 			FileSystemAuditMessageProcessorConfiguration.class, "outputFormat");
 	}
 
+	public boolean isPersistentAuditMessageProcessorEnabled() {
+		return _persistentAuditMessageProcessorCompanyConfiguration.enabled();
+	}
+
+	public boolean isPersistentAuditMessageProcessorSystemDisabled() {
+		return !_persistentAuditMessageProcessorConfiguration.enabled();
+	}
+
 	public boolean isPseudonymizationEnabled() {
 		return _auditConfiguration.pseudonymizationEnabled();
 	}
@@ -135,6 +162,10 @@ public class AuditConfigurationDisplayContext {
 	private final AuditConfiguration _auditConfiguration;
 	private final FileSystemAuditMessageProcessorConfiguration
 		_fileSystemAuditMessageProcessorConfiguration;
+	private final PersistentAuditMessageProcessorCompanyConfiguration
+		_persistentAuditMessageProcessorCompanyConfiguration;
+	private final PersistentAuditMessageProcessorConfiguration
+		_persistentAuditMessageProcessorConfiguration;
 	private final boolean _systemScope;
 
 }
