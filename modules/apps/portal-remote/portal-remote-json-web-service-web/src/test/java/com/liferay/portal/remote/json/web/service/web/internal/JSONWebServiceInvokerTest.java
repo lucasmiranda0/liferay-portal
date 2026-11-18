@@ -6,6 +6,7 @@
 package com.liferay.portal.remote.json.web.service.web.internal;
 
 import com.liferay.petra.string.StringBundler;
+import com.liferay.petra.string.StringPool;
 import com.liferay.portal.kernel.service.LayoutLocalService;
 import com.liferay.portal.kernel.service.LayoutLocalServiceUtil;
 import com.liferay.portal.kernel.service.ServiceContext;
@@ -29,6 +30,9 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+
+import jodd.json.TypeJsonSerializer;
+import jodd.json.TypeJsonSerializerMap;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -96,6 +100,8 @@ public class JSONWebServiceInvokerTest extends BaseJSONWebServiceTestCase {
 	@After
 	public void tearDown() {
 		_serviceContextFactoryMockedStatic.close();
+
+		_typeJsonSerializerMap.register(FooDataImpl.class, _typeJsonSerializer);
 	}
 
 	@Test
@@ -267,10 +273,20 @@ public class JSONWebServiceInvokerTest extends BaseJSONWebServiceTestCase {
 
 	@Test
 	public void testFiltering() throws Exception {
+		_typeJsonSerializerMap.register(
+			FooDataImpl.class,
+			(jsonContext, object) -> {
+				FooDataImpl fooDataImpl = (FooDataImpl)object;
+
+				fooDataImpl.setName(StringPool.BLANK);
+
+				return _typeJsonSerializer.serialize(jsonContext, object);
+			});
+
 		Map<String, Object> params = new LinkedHashMap<>();
 
 		Map<String, Object> map1 = LinkedHashMapBuilder.<String, Object>put(
-			"$data[id] = /foo/get-foo-data", params
+			"$data[id,name] = /foo/get-foo-data", params
 		).build();
 
 		params.put("id", 173);
@@ -294,7 +310,9 @@ public class JSONWebServiceInvokerTest extends BaseJSONWebServiceTestCase {
 		Assert.assertTrue(invokerResult.getResult() instanceof Map);
 
 		Assert.assertEquals(
-			toMap("{\"id\":173,\"world\":\"Welcome 173 to Jupiter\"}"),
+			toMap(
+				"{\"id\":173,\"name\":\"\",\"world\":\"Welcome 173 to " +
+					"Jupiter\"}"),
 			toMap(toJSON(result)));
 	}
 
@@ -1001,8 +1019,13 @@ public class JSONWebServiceInvokerTest extends BaseJSONWebServiceTestCase {
 			jsonWebServiceActionsManager, mockHttpServletRequest);
 	}
 
+	private static final TypeJsonSerializerMap _typeJsonSerializerMap =
+		TypeJsonSerializerMap.get();
+
 	private final MockedStatic<ServiceContextFactory>
 		_serviceContextFactoryMockedStatic = Mockito.mockStatic(
 			ServiceContextFactory.class);
+	private final TypeJsonSerializer<Object> _typeJsonSerializer =
+		_typeJsonSerializerMap.lookup(FooDataImpl.class);
 
 }
